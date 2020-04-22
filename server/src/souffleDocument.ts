@@ -7,7 +7,7 @@ import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
 
-const souffle = require('tree-sitter-souffle');
+const souffle = require('../tree-sitter-souffle');
 let parser = new tree_sitter();
 parser.setLanguage(souffle);
 
@@ -287,7 +287,7 @@ export class SouffleDocument {
 				uriToSouffleDocument.forEach(souffleDoc => {
 					let decl = souffleDoc.relation_decls.get(symbol);
 					if (decl) {declared = true;}
-					if (souffleDoc.preprocessor_define.includes(symbol)) {
+					if (!declared && souffleDoc.preprocessor_define.includes(symbol)) {
 						// silent error if symbol appears in unparsed #define
 						declared = true;
 					}
@@ -306,7 +306,7 @@ export class SouffleDocument {
 			uriToSouffleDocument.forEach(souffleDoc => {
 				let decl = souffleDoc.relation_defs.get(symbol);
 				if (decl) {defined = true;}
-				if (souffleDoc.preprocessor_define.includes(symbol)) {
+				if (!defined && souffleDoc.preprocessor_define.includes(symbol)) {
 					// silent error if symbol appears in unparsed #define
 					defined = true;
 				}
