@@ -66,11 +66,14 @@ export class SouffleDocument {
 		this.connection = connection;
 		let doc = TextDocument.create(uri,languageId,version,content);
 		this.tree = parser.parse(doc.getText());
-		console.log(this.tree.rootNode.toString());
 		this.document = doc;
 		this.version = version;
 		this.tree_version = version;
 		uriToSouffleDocument.set(uri, this);
+	}
+
+	log(str: string) {
+		if (false) console.log(str);
 	}
 
 	getLeafAtPosition(pos: Position, tree: tree_sitter.Tree) {
@@ -97,7 +100,7 @@ export class SouffleDocument {
 			if (!fs.existsSync(include_uri.fsPath)) {
 				this.errors.push({node: node, message: "Include file does not exist", severity: DiagnosticSeverity.Error});
 			} else if (!uriToSouffleDocument.has(include_uri.toString())) {
-				console.log("reading include file: " + include_uri.fsPath);
+				this.log("reading include file: " + include_uri.fsPath);
 				fs.readFile(include_uri.fsPath,(err, content) => {
 					if (err) {return;}
 					let d = new SouffleDocument(this.connection, include_uri.toString(),"souffle",-1,content.toString());
@@ -233,7 +236,7 @@ export class SouffleDocument {
 			}
 			TextDocument.update(textDocument,contentChanges,version);
 			let new_tree = parser.parse(textDocument.getText(), old_tree);
-			console.log("updated tree");
+			this.log("updated tree");
 			this.tree = new_tree;
 			this.tree_version = version;
 		}
@@ -250,7 +253,7 @@ export class SouffleDocument {
 	}
 
 	validate(recursive: boolean = false) {
-		console.log("validating " + this.document.uri.toString());
+		this.log("validating " + this.document.uri.toString());
 		this.getSemanticErrors();
 		let diags: Diagnostic[] = [];
 		this.errors.forEach(error => {
@@ -323,7 +326,7 @@ export class SouffleDocument {
 		let leaf = this.getLeafAtPosition(position, this.tree);
 		let symbol = leaf.text;
 		let decls: LocationLink[] = [];
-		console.log("getDeclarations for " + symbol);
+		this.log("getDeclarations for " + symbol);
 		uriToSouffleDocument.forEach(souffleDoc => {
 			let decl = souffleDoc.relation_decls.get(symbol);
 			if (decl) {
@@ -403,7 +406,7 @@ export class SouffleDocument {
 
 	getCompletion(position: Position): Promise<CompletionItem[]> {
 		while (this.version != this.tree_version) {
-			console.log("mismatch version: " + this.version + " ... " + this.tree_version);
+			this.log("mismatch version: " + this.version + " ... " + this.tree_version);
 			break;
 		}
 		//let symbol = this.document.getText(this.getWordRangeAtPosition(position));
@@ -412,12 +415,12 @@ export class SouffleDocument {
 		let symbol = leaf.text;
 		symbol = symbol.split(/\s/)[0];
 
-		console.log("got Completion request: " + symbol);
+		this.log("got Completion request: " + symbol);
 		let items: CompletionItem[] = [];
 		uriToSouffleDocument.forEach(souffleDoc => {
 			souffleDoc.relation_decls.forEach((node,name) => {
 				if (name.includes("next_instruction")) {
-					console.log("name: " + name);
+					this.log("name: " + name);
 				}
 				if (name.startsWith(symbol)) {
 					while (node && node.type !== 'relation_decl') {

@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 
 import * as path from 'path';
-import { workspace, ExtensionContext } from 'vscode';
+import * as vscode from 'vscode';
 
 import {
 	LanguageClient,
@@ -15,7 +15,7 @@ import {
 
 let client: LanguageClient;
 
-export function activate(context: ExtensionContext) {
+export function activate(context: vscode.ExtensionContext) {
 	// The server is implemented in node
 	let serverModule = context.asAbsolutePath(
 		path.join('server', 'out', 'server.js')
@@ -41,7 +41,7 @@ export function activate(context: ExtensionContext) {
 		documentSelector: [{ scheme: 'file', language: 'souffle' }],
 		synchronize: {
 			// Notify the server about file changes to '.clientrc files contained in the workspace
-			fileEvents: workspace.createFileSystemWatcher('**/.clientrc'),
+			fileEvents: vscode.workspace.createFileSystemWatcher('**/.clientrc'),
 			configurationSection: "souffleLanguageServer"
 		}
 	};
@@ -56,6 +56,16 @@ export function activate(context: ExtensionContext) {
 
 	// Start the client. This will also launch the server
 	client.start();
+
+	context.subscriptions.push(vscode.commands.registerCommand("souffleLanguageServer.selectRoot", () => {
+		vscode.window.showOpenDialog({canSelectFolders: false, canSelectMany: false}).then(uris => {
+			uris.forEach(uri => {
+				vscode.window.showInformationMessage("setting new root to " + uri.fsPath);
+				vscode.workspace.getConfiguration().update("souffleLanguageServer.rootProjectFile", uri.fsPath);
+			});
+		});
+	}));
+
 }
 
 export function deactivate(): Thenable<void> | undefined {

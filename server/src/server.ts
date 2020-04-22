@@ -30,7 +30,12 @@ import {
 	DefinitionParams,
 	ReferenceParams,
 	DocumentHighlightParams,
-	DocumentHighlight
+	DocumentHighlight,
+	CodeAction,
+	CodeActionOptions,
+	CodeActionKind,
+	CodeActionParams,
+	Command
 } from 'vscode-languageserver';
 
 import * as tree_sitter from 'tree-sitter';
@@ -73,6 +78,7 @@ connection.onInitialize((params: InitializeParams) => {
 		capabilities.textDocument.publishDiagnostics.relatedInformation
 	);
 
+	let ca: CodeActionOptions = {};
 	const result: InitializeResult = {
 		capabilities: {
 			textDocumentSync: TextDocumentSyncKind.Incremental,
@@ -86,6 +92,9 @@ connection.onInitialize((params: InitializeParams) => {
 			definitionProvider: true,
 			referencesProvider: true,
 			documentHighlightProvider: true,
+			codeActionProvider: {
+				codeActionKinds: [CodeActionKind.QuickFix]
+			}
 		}
 	};
 	if (hasWorkspaceFolderCapability) {
@@ -115,32 +124,16 @@ interface SouffleServerSettings {
 	rootProjectFile: string;
 }
 
-// The global settings, used when the `workspace/configuration` request is not supported by the client.
-// Please note that this is not the case when using this server with the client provided in this example
-// but could happen with other clients.
-const defaultSettings: SouffleServerSettings = { rootProjectFile: "" };
-let globalSettings: SouffleServerSettings = defaultSettings;
-
-// Cache the settings of all open documents
-let documentSettings: Map<string, Thenable<SouffleServerSettings>> = new Map();
-
 connection.onDidChangeConfiguration(change => {
-	let settings = change.settings;
-	let root_uri = Uri.file(settings.souffleLanguageServer.rootProjectFile);
-	console.log("root is " + root_uri);
-	//if (hasConfigurationCapability) {
-	//	// Reset all cached document settings
-	//	documentSettings.clear();
-	//} else {
-	//	globalSettings = <SouffleServerSettings>(
-	//		(settings.souffleLanguageServer || defaultSettings)
-	//	);
-	//}
+	let settings: SouffleServerSettings = change.settings.souffleLanguageServer;
+	let root_uri = Uri.file(settings.rootProjectFile);
+	console.log("Soufflé root file is " + root_uri);
 
 	if (root_uri && fs.existsSync(root_uri.fsPath) && !uriToSouffleDocument.has(root_uri.toString())) {
 		fs.readFile(root_uri.fsPath,(err, content) => {
-			if (err) {return;}
-			console.log("read root file at " + root_uri);
+			if (err) {
+				return;
+			}
 			let root = new SouffleDocument(connection, root_uri.toString(), "souffle", -1, content.toString());
 			root.parse();
 			sleep(2000).then(() => 
@@ -150,45 +143,9 @@ connection.onDidChangeConfiguration(change => {
 	}
 });
 
-//function getDocumentSettings(resource: string): Thenable<SouffleServerSettings> {
-//	if (!hasConfigurationCapability) {
-//		return Promise.resolve(globalSettings);
-//	}
-//	let result = documentSettings.get(resource);
-//	if (!result) {
-//		result = connection.workspace.getConfiguration({
-//			scopeUri: resource,
-//			section: 'languageServerExample'
-//		});
-//		documentSettings.set(resource, result);
-//	}
-//	return result;
-//}
-
-// Only keep settings for open documents
-//documents.onDidClose(e => {
-//	documentSettings.delete(e.document.uri);
-//});
-
-// The content of a text document has changed. This event is emitted
-// when the text document first opened or when its content has changed.
-//documents.onDidChangeContent(change => {
-//	console.log(`onDidChangeContent`);
-//	//validateTextDocument(change.document);
-//	let uri = change.document.uri.toString();
-//	let d = uriToSouffleDocument.get(uri);
-//	if (d) {
-//		d.updateDocument(change.document);
-//	} else {
-//		d = new SouffleDocument(connection,change.document);
-//	}
-//	d.parse();
-//	d.validate();
-//});
-
 connection.onDidChangeWatchedFiles(_change => {
 	// Monitored files have change in VSCode
-	connection.console.log('We received an file change event');
+	connection.console.log('received an file change event');
 });
 
 export function sleep(ms = 0) {
@@ -253,10 +210,8 @@ connection.onDeclaration(
 	(params: DeclarationParams, token: CancellationToken): HandlerResult<LocationLink[], void> => {
 		let uri = params.textDocument.uri.toString();
 		let pos = params.position;
-		console.log("onDeclaration")
 		let souffleDoc =  uriToSouffleDocument.get(uri);
 		if (souffleDoc) {
-			console.log("onDeclaration " + souffleDoc.document.uri.toString());
 			return Promise.resolve(souffleDoc.getDeclarations(pos)); 
 		}
 		return Promise.resolve([]); 
@@ -267,10 +222,8 @@ connection.onDefinition(
 	(params: DefinitionParams, token: CancellationToken): HandlerResult<LocationLink[] | undefined, void> => {
 		let uri = params.textDocument.uri.toString();
 		let pos = params.position;
-		console.log("onDefinition")
 		let souffleDoc =  uriToSouffleDocument.get(uri);
 		if (souffleDoc) {
-			console.log("onDefinition " + souffleDoc.document.uri.toString());
 			return Promise.resolve(souffleDoc.getDefinitions(pos)); 
 		}
 		return Promise.resolve([]); 
@@ -281,10 +234,8 @@ connection.onReferences(
 	(params: ReferenceParams, token: CancellationToken): HandlerResult<Location[] | undefined, void> => {
 		let uri = params.textDocument.uri.toString();
 		let pos = params.position;
-		console.log("onReferences")
 		let souffleDoc =  uriToSouffleDocument.get(uri);
 		if (souffleDoc) {
-			console.log("onReferences " + souffleDoc.document.uri.toString());
 			return Promise.resolve(souffleDoc.getReferences(pos)); 
 		}
 		return Promise.resolve([]); 
@@ -315,9 +266,19 @@ connection.onHover(
 	}
 );
 
-// Make the text document manager listen on the connection
-// for open, change and close text document events
-//documents.listen(connection);
+connection.onCodeAction(
+	(params: CodeActionParams, token: CancellationToken): HandlerResult<(Command|CodeAction)[], void> => {
+		let actions: (Command|CodeAction)[] = [];
+		params.context.diagnostics.forEach(diag => {
+			let command : Command = {
+				title: "Set master project file",
+				command: "souffleLanguageServer.selectRoot"
+			}
+			actions.push(command);
+		});
+		return Promise.resolve(actions); 
+	}
+);
 
 // Listen on the connection
 connection.listen();

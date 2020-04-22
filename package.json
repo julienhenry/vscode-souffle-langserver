@@ -35,7 +35,7 @@
 		],
 		"configuration": {
 			"type": "object",
-			"title": "Soufflé Language Server configuration",
+			"title": "Soufflé Language Server",
 			"properties": {
 				"souffleLanguageServer.rootProjectFile": {
 					"scope": "resource",
