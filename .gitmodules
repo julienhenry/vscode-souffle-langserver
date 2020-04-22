@@ -1,0 +1,3 @@
+[submodule "server/tree-sitter-souffle"]
+	path = server/tree-sitter-souffle
+	url = git@github.com:julienhenry/tree-sitter-souffle.git

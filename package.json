@@ -1,0 +1,75 @@
+{
+	"name": "souffle-langserver",
+	"description": "A language server for Soufflé",
+	"author": "Julien Henry",
+	"license": "MIT",
+	"version": "1.0.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Microsoft/vscode-extension-samples"
+	},
+	"publisher": "vscode-samples",
+	"categories": [],
+	"keywords": [
+		"multi-root ready"
+	],
+	"engines": {
+		"vscode": "^1.43.0"
+	},
+	"activationEvents": [
+		"onLanguage:souffle"
+	],
+	"main": "./client/out/extension",
+	"contributes": {
+		"languages": [
+			{
+				"id": "souffle",
+				"extensions": [
+					".project",
+					".dl"
+				],
+				"aliases": [
+					"Soufflé"
+				]
+			}
+		],
+		"configuration": {
+			"type": "object",
+			"title": "Example configuration",
+			"properties": {
+				"souffleLanguageServer.rootProjectFile": {
+					"scope": "resource",
+					"type": "string",
+					"default": "master.project",
+					"description": "name of the master file passed to the Soufflé compiler"
+				},
+				"languageServerExample.trace.server": {
+					"scope": "window",
+					"type": "string",
+					"enum": [
+						"off",
+						"messages",
+						"verbose"
+					],
+					"default": "off",
+					"description": "Traces the communication between VS Code and the language server."
+				}
+			}
+		}
+	},
+	"scripts": {
+		"vscode:prepublish": "cd client && npm run update-vscode && cd .. && npm run compile",
+		"compile": "tsc -b",
+		"watch": "tsc -b -w",
+		"postinstall": "cd client && npm install && cd ../server && npm install && npm link tree-sitter-souffle/ && cd ..",
+		"test": "sh ./scripts/e2e.sh"
+	},
+	"devDependencies": {
+		"@types/mocha": "^5.2.7",
+		"mocha": "^6.2.2",
+		"@types/node": "^12.12.0",
+		"eslint": "^6.4.0",
+		"@typescript-eslint/parser": "^2.3.0",
+		"typescript": "^3.8.3"
+	}
+}
