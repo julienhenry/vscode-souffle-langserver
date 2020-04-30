@@ -1,15 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as tree_sitter from 'tree-sitter';
+import * as tree_sitter from 'web-tree-sitter';
 import { Connection, Diagnostic, DiagnosticSeverity, Position, PublishDiagnosticsParams, Range, Location, LocationLink, TextDocumentPositionParams, Hover, MarkupKind, MarkupContent, DocumentHighlight, DocumentHighlightKind, CompletionItem, CompletionItemKind, DidOpenTextDocumentParams, DidChangeTextDocumentParams, TextDocumentContentChangeEvent } from 'vscode-languageserver';
 import { URI as Uri } from 'vscode-uri';
 import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
 
-const souffle = require('../tree-sitter-souffle');
-let parser = new tree_sitter();
-parser.setLanguage(souffle);
+export let parsers: tree_sitter[] = [];
 
 export let uriToSouffleDocument = new Map<string, SouffleDocument>();
 
@@ -65,7 +63,7 @@ export class SouffleDocument {
 	constructor(connection: Connection, uri: string, languageId: string, version: number, content: string) {
 		this.connection = connection;
 		let doc = TextDocument.create(uri,languageId,version,content);
-		this.tree = parser.parse(doc.getText());
+		this.tree = parsers[0].parse(doc.getText());
 		this.document = doc;
 		this.version = version;
 		this.tree_version = version;
@@ -235,7 +233,7 @@ export class SouffleDocument {
 				}
 			}
 			TextDocument.update(textDocument,contentChanges,version);
-			let new_tree = parser.parse(textDocument.getText(), old_tree);
+			let new_tree = parsers[0].parse(textDocument.getText(), old_tree);
 			this.log("updated tree");
 			this.tree = new_tree;
 			this.tree_version = version;

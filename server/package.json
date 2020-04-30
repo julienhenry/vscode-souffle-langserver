@@ -13,7 +13,8 @@
 	},
 	"dependencies": {
 		"tree-sitter": "^0.16.1",
-		"tree-sitter-souffle": "file:tree-sitter-souffle",
+		"tree-sitter-souffle": "^1.0.0",
+		"web-tree-sitter": "^0.16.2",
 		"vscode-languageserver": "^6.1.1",
 		"vscode-languageserver-textdocument": "^1.0.1",
 		"vscode-uri": "2.1.1"

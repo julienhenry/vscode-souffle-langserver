@@ -38,16 +38,16 @@ import {
 	Command
 } from 'vscode-languageserver';
 
-import * as tree_sitter from 'tree-sitter';
-const souffle = require('tree-sitter-souffle');
+import * as tree_sitter from 'web-tree-sitter';
+//const souffle = require('tree-sitter-souffle');
 //import * as souffle from 'tree-sitter-souffle';
 import * as fs from 'fs';
 import { URI as Uri } from 'vscode-uri';
-
+import * as path from 'path';
 import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
-import { SouffleDocument, uriToSouffleDocument } from './souffleDocument';
+import { SouffleDocument, uriToSouffleDocument, parsers } from './souffleDocument';
 
 // Create a connection for the server. The connection uses Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -61,9 +61,9 @@ let hasConfigurationCapability: boolean = false;
 let hasWorkspaceFolderCapability: boolean = false;
 let hasDiagnosticRelatedInformationCapability: boolean = false;
 
-connection.onInitialize((params: InitializeParams) => {
+connection.onInitialize(async (params: InitializeParams) => {
 	let capabilities = params.capabilities;
-
+	params.initializationOptions
 	// Does the client support the `workspace/configuration` request?
 	// If not, we will fall back using global settings
 	hasConfigurationCapability = !!(
@@ -104,6 +104,16 @@ connection.onInitialize((params: InitializeParams) => {
 			}
 		};
 	}
+
+    let wasm = path.join(__dirname, "..", "tree-sitter-souffle", "tree-sitter-souffle.wasm");
+    let parser = await tree_sitter.Language.load(wasm).then(language => {
+    	let parser = new tree_sitter();
+    	parser.setLanguage(language);
+    	return parser;
+	});
+	parsers.push(parser);
+
+
 	return result;
 });
 
@@ -270,11 +280,15 @@ connection.onCodeAction(
 	(params: CodeActionParams, token: CancellationToken): HandlerResult<(Command|CodeAction)[], void> => {
 		let actions: (Command|CodeAction)[] = [];
 		params.context.diagnostics.forEach(diag => {
-			let command : Command = {
-				title: "Set master project file",
-				command: "souffleLanguageServer.selectRoot"
+			let codeAction: CodeAction = {
+				command: {
+					title: "Set master project file",
+					command: "souffleLanguageServer.selectRoot"
+				},
+				title: "Update master project file",
+				kind: CodeActionKind.QuickFix,
 			}
-			actions.push(command);
+			actions.push(codeAction);
 		});
 		return Promise.resolve(actions); 
 	}
