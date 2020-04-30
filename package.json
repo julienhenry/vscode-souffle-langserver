@@ -8,6 +8,7 @@
 		"type": "git",
 		"url": "https://github.com/julienhenry/vscode-souffle-langserver.git"
 	},
+	"icon": "./logo.png",
 	"publisher": "jhenry",
 	"categories": [],
 	"keywords": [
