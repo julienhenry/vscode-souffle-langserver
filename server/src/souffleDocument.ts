@@ -47,7 +47,8 @@ export class SouffleDocument {
 	version: number;
 
 	includes: Uri[] = [];
-	errors: {node: tree_sitter.SyntaxNode, message: string, severity: DiagnosticSeverity}[] = [];
+	syntax_errors: {node: tree_sitter.SyntaxNode, message: string, severity: DiagnosticSeverity}[] = [];
+	semantic_errors: {node: tree_sitter.SyntaxNode, message: string, severity: DiagnosticSeverity}[] = [];
 	// #define preprocessor directives that are currently not parsed correctly
 	preprocessor_define: string = "";
 
@@ -81,7 +82,7 @@ export class SouffleDocument {
 
 	visit(node: tree_sitter.SyntaxNode, ctx: SouffleContext) {
 		if (node.type === 'ERROR' && node.children.find(function (node) { return node.hasError(); }) === undefined) {
-			this.errors.push({node: node, message: "Syntax Error", severity: DiagnosticSeverity.Error});
+			this.syntax_errors.push({node: node, message: "Syntax Error", severity: DiagnosticSeverity.Error});
 		}
 
 		if (node.type === 'filename') {
@@ -96,7 +97,7 @@ export class SouffleDocument {
 			}
 			this.includes.push(include_uri);
 			if (!fs.existsSync(include_uri.fsPath)) {
-				this.errors.push({node: node, message: "Include file does not exist", severity: DiagnosticSeverity.Error});
+				this.syntax_errors.push({node: node, message: "Include file does not exist", severity: DiagnosticSeverity.Error});
 			} else if (!uriToSouffleDocument.has(include_uri.toString())) {
 				this.log("reading include file: " + include_uri.fsPath);
 				fs.readFile(include_uri.fsPath,(err, content) => {
@@ -241,7 +242,8 @@ export class SouffleDocument {
 	}
 
 	parse() {
-		this.errors = [];
+		this.syntax_errors = [];
+		this.semantic_errors = [];
 		this.includes = [];
 		this.relation_decls.clear();
 		this.relation_defs.clear();
@@ -254,7 +256,8 @@ export class SouffleDocument {
 		this.log("validating " + this.document.uri.toString());
 		this.getSemanticErrors();
 		let diags: Diagnostic[] = [];
-		this.errors.forEach(error => {
+		let errors = this.syntax_errors.concat(this.semantic_errors)
+		errors.forEach(error => {
 			let d: Diagnostic = {
 				range: range(error.node),
 				message: error.message,
@@ -274,6 +277,7 @@ export class SouffleDocument {
 			this.includes.forEach(include => {
 				let included = uriToSouffleDocument.get(include.toString());
 				if (included) {
+					console.log("validating " + include.toString());
 					included.validate(recursive);
 				}
 			});
@@ -281,6 +285,7 @@ export class SouffleDocument {
 	}
 
 	getSemanticErrors() {
+		this.semantic_errors = [];
 		let all = [this.relation_uses, this.relation_defs];
 		all.forEach(map => {
 			map.forEach((uses,symbol) => {
@@ -295,7 +300,7 @@ export class SouffleDocument {
 				});
 				if (!declared) {
 					uses.forEach(node => {
-						this.errors.push({node: node, message: "Use of undeclared relation: " + symbol, severity: DiagnosticSeverity.Error});
+						this.semantic_errors.push({node: node, message: "Use of undeclared relation: " + symbol, severity: DiagnosticSeverity.Error});
 					});
 				}
 			});
@@ -314,9 +319,31 @@ export class SouffleDocument {
 			});
 			if (!defined) {
 				uses.forEach(node => {
-					this.errors.push({node: node, message: "Use of a relation that is always empty: " + symbol, severity: DiagnosticSeverity.Warning});
+					this.semantic_errors.push({node: node, message: "Use of a relation that is always empty: " + symbol, severity: DiagnosticSeverity.Warning});
 				});
 			}
+		});
+
+		// detect rules that use arguments only once
+		let rules = this.tree.rootNode.descendantsOfType('rule_def')
+		rules.forEach(rule => {
+			let args = rule.descendantsOfType('arg')
+			let used_idents = new Map<string, tree_sitter.SyntaxNode[]>();
+			args.forEach(arg => {
+				if (arg.childCount === 1 && arg.children[0].type === 'IDENT') {
+					let ident = arg.children[0].text;
+					let n = used_idents.get(ident);
+					if (!n) {n = [];}
+					n.push(arg.children[0])
+					used_idents.set(ident, n);
+				}
+			});
+			used_idents.forEach((nodes, symbol) => {
+				if (this.preprocessor_define.includes(symbol)) {return;}
+				if (nodes.length <= 1 && !(symbol.startsWith("__") && symbol.endsWith("__"))) {
+					this.semantic_errors.push({node: nodes[0], message: "Symbol " + symbol + " is used only once", severity: DiagnosticSeverity.Warning})
+				}
+			})
 		});
 	}
 

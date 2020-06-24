@@ -146,7 +146,7 @@ connection.onDidChangeConfiguration(change => {
 			}
 			let root = new SouffleDocument(connection, root_uri.toString(), "souffle", -1, content.toString());
 			root.parse();
-			sleep(2000).then(() => 
+			sleep(1000).then(() => 
 				root.validate(true)
 			);
 		});
