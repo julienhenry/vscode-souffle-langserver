@@ -3,40 +3,7 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 
-import {
-	createConnection,
-	TextDocuments,
-	Diagnostic,
-	DiagnosticSeverity,
-	ProposedFeatures,
-	InitializeParams,
-	DidChangeConfigurationNotification,
-	CompletionItem,
-	CompletionItemKind,
-	TextDocumentPositionParams,
-	TextDocumentSyncKind,
-	InitializeResult,
-	Range,
-	PublishDiagnosticsParams,
-	LocationLink,
-	Location,
-	DeclarationParams,
-	RequestHandler,
-	DeclarationLink,
-	CancellationToken,
-	HandlerResult,
-	HoverParams,
-	Hover,
-	DefinitionParams,
-	ReferenceParams,
-	DocumentHighlightParams,
-	DocumentHighlight,
-	CodeAction,
-	CodeActionOptions,
-	CodeActionKind,
-	CodeActionParams,
-	Command
-} from 'vscode-languageserver';
+import * as lsp from 'vscode-languageserver/node';
 
 import * as tree_sitter from 'web-tree-sitter';
 //const souffle = require('tree-sitter-souffle');
@@ -47,11 +14,13 @@ import * as path from 'path';
 import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
-import { SouffleDocument, uriToSouffleDocument, parsers } from './souffleDocument';
+import { SouffleDocument, uriToSouffleDocument, parsers, legend } from './souffleDocument';
+import { connect } from 'http2';
+import { SemanticTokenTypes } from 'vscode-languageserver/node';
 
 // Create a connection for the server. The connection uses Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
-let connection = createConnection(ProposedFeatures.all);
+let connection = lsp.createConnection(lsp.ProposedFeatures.all);
 
 // Create a simple text document manager. The text document manager
 // supports full document sync only
@@ -61,7 +30,7 @@ let hasConfigurationCapability: boolean = false;
 let hasWorkspaceFolderCapability: boolean = false;
 let hasDiagnosticRelatedInformationCapability: boolean = false;
 
-connection.onInitialize(async (params: InitializeParams) => {
+connection.onInitialize(async (params: lsp.InitializeParams) => {
 	let capabilities = params.capabilities;
 	params.initializationOptions
 	// Does the client support the `workspace/configuration` request?
@@ -78,10 +47,10 @@ connection.onInitialize(async (params: InitializeParams) => {
 		capabilities.textDocument.publishDiagnostics.relatedInformation
 	);
 
-	let ca: CodeActionOptions = {};
-	const result: InitializeResult = {
+	let ca: lsp.CodeActionOptions = {};
+	const result: lsp.InitializeResult = {
 		capabilities: {
-			textDocumentSync: TextDocumentSyncKind.Incremental,
+			textDocumentSync: lsp.TextDocumentSyncKind.Incremental,
 			// Tell the client that the server supports code completion
 			completionProvider: {
 				resolveProvider: false,
@@ -93,8 +62,15 @@ connection.onInitialize(async (params: InitializeParams) => {
 			referencesProvider: true,
 			documentHighlightProvider: true,
 			codeActionProvider: {
-				codeActionKinds: [CodeActionKind.QuickFix]
-			}
+				codeActionKinds: [lsp.CodeActionKind.QuickFix]
+			},
+			//semanticTokensProvider: {
+			//	documentSelector: [{ scheme: 'file', language: 'souffle' }],
+			//	legend: legend,
+			//	//range: true,
+			//	full:true
+			//},
+			codeLensProvider: {resolveProvider: false}
 		}
 	};
 	if (hasWorkspaceFolderCapability) {
@@ -113,14 +89,13 @@ connection.onInitialize(async (params: InitializeParams) => {
 	});
 	parsers.push(parser);
 
-
 	return result;
 });
 
 connection.onInitialized(() => {
 	if (hasConfigurationCapability) {
 		// Register for all configuration changes.
-		connection.client.register(DidChangeConfigurationNotification.type, undefined);
+		connection.client.register(lsp.DidChangeConfigurationNotification.type, undefined);
 	}
 	if (hasWorkspaceFolderCapability) {
 		connection.workspace.onDidChangeWorkspaceFolders(_event => {
@@ -132,12 +107,24 @@ connection.onInitialized(() => {
 // The example settings
 interface SouffleServerSettings {
 	rootProjectFile: string;
+	transformedRam: string;
+	transformedDatalog: string;
+	souffleInvocationDir: string;
 }
+
+export let rootUri: Uri;
+export let transformedRam: Uri;
+export let transformedDatalog: Uri;
+export let souffleInvocationDir: Uri;
 
 connection.onDidChangeConfiguration(change => {
 	let settings: SouffleServerSettings = change.settings.souffleLanguageServer;
 	let root_uri = Uri.file(settings.rootProjectFile);
-	console.log("Soufflé root file is " + root_uri);
+	console.log("## Soufflé root file is " + root_uri);
+	rootUri = root_uri;
+	transformedRam = Uri.file(settings.transformedRam);
+	transformedDatalog = Uri.file(settings.transformedDatalog);
+	souffleInvocationDir = Uri.file(settings.souffleInvocationDir);
 
 	if (root_uri && fs.existsSync(root_uri.fsPath) && !uriToSouffleDocument.has(root_uri.toString())) {
 		fs.readFile(root_uri.fsPath,(err, content) => {
@@ -164,7 +151,7 @@ export function sleep(ms = 0) {
 
 // This handler provides the initial list of the completion items.
 connection.onCompletion(
-	(params: TextDocumentPositionParams): Promise<CompletionItem[]> => {
+	(params: lsp.TextDocumentPositionParams): Promise<lsp.CompletionItem[]> => {
 		let uri = params.textDocument.uri.toString();
 		let pos = params.position;
 		return sleep(100).then(() => {
@@ -213,11 +200,10 @@ connection.onDidCloseTextDocument((params) => {
 	connection.console.log(`${params.textDocument.uri} closed.`);
 });
 
-
 //let handlerServer: RequestHandler<DeclarationParams, Declaration | DeclarationLink[] | undefined | null, Location[] | DeclarationLink[], void>): void {
 
 connection.onDeclaration(
-	(params: DeclarationParams, token: CancellationToken): HandlerResult<LocationLink[], void> => {
+	(params: lsp.DeclarationParams, token: lsp.CancellationToken): lsp.HandlerResult<lsp.LocationLink[], void> => {
 		let uri = params.textDocument.uri.toString();
 		let pos = params.position;
 		let souffleDoc =  uriToSouffleDocument.get(uri);
@@ -229,7 +215,7 @@ connection.onDeclaration(
 );
 
 connection.onDefinition(
-	(params: DefinitionParams, token: CancellationToken): HandlerResult<LocationLink[] | undefined, void> => {
+	(params: lsp.DefinitionParams, token: lsp.CancellationToken): lsp.HandlerResult<lsp.LocationLink[] | undefined, void> => {
 		let uri = params.textDocument.uri.toString();
 		let pos = params.position;
 		let souffleDoc =  uriToSouffleDocument.get(uri);
@@ -241,7 +227,7 @@ connection.onDefinition(
 );
 
 connection.onReferences(
-	(params: ReferenceParams, token: CancellationToken): HandlerResult<Location[] | undefined, void> => {
+	(params: lsp.ReferenceParams, token: lsp.CancellationToken): lsp.HandlerResult<lsp.Location[] | undefined, void> => {
 		let uri = params.textDocument.uri.toString();
 		let pos = params.position;
 		let souffleDoc =  uriToSouffleDocument.get(uri);
@@ -253,7 +239,7 @@ connection.onReferences(
 );
 
 connection.onDocumentHighlight(
-	(params: DocumentHighlightParams, token: CancellationToken): HandlerResult<DocumentHighlight[] | undefined, void> => {
+	(params: lsp.DocumentHighlightParams, token: lsp.CancellationToken): lsp.HandlerResult<lsp.DocumentHighlight[] | undefined, void> => {
 		let uri = params.textDocument.uri.toString();
 		let pos = params.position;
 		let souffleDoc =  uriToSouffleDocument.get(uri);
@@ -265,7 +251,7 @@ connection.onDocumentHighlight(
 );
 
 connection.onHover(
-	(params: HoverParams, token: CancellationToken): HandlerResult<Hover | null | undefined, void> => {
+	(params: lsp.HoverParams, token: lsp.CancellationToken): lsp.HandlerResult<lsp.Hover | null | undefined, void> => {
 		let uri = params.textDocument.uri.toString();
 		let pos = params.position;
 		let souffleDoc =  uriToSouffleDocument.get(uri);
@@ -277,22 +263,49 @@ connection.onHover(
 );
 
 connection.onCodeAction(
-	(params: CodeActionParams, token: CancellationToken): HandlerResult<(Command|CodeAction)[], void> => {
-		let actions: (Command|CodeAction)[] = [];
+	(params: lsp.CodeActionParams, token: lsp.CancellationToken): lsp.HandlerResult<(lsp.Command|lsp.CodeAction)[], void> => {
+		let actions: (lsp.Command|lsp.CodeAction)[] = [];
 		params.context.diagnostics.forEach(diag => {
-			let codeAction: CodeAction = {
+			let codeAction: lsp.CodeAction = {
 				command: {
 					title: "Set master project file",
-					command: "souffleLanguageServer.selectRoot"
+					command: "souffleLanguageServer.selectRoot",
+					arguments: [params.textDocument.uri]
 				},
 				title: "Update master project file",
-				kind: CodeActionKind.QuickFix,
+				kind: lsp.CodeActionKind.QuickFix,
 			}
 			actions.push(codeAction);
 		});
-		return Promise.resolve(actions); 
+		return Promise.resolve(actions);
 	}
 );
+
+connection.onCodeLens(
+	(params: lsp.CodeLensParams, token: lsp.CancellationToken): lsp.HandlerResult<(lsp.CodeLens)[], void> => {
+		let lenses: lsp.CodeLens[] = [];
+		let uri = params.textDocument.uri.toString();
+		let souffleDoc =  uriToSouffleDocument.get(uri);
+		if (souffleDoc) {
+			return Promise.resolve(souffleDoc.getLenses()); 
+		}
+		return Promise.resolve(lenses);
+	}
+);
+
+connection.onRequest(lsp.SemanticTokensDeltaRequest.method, () => {console.log("semantic token delta request")});
+connection.onRequest(lsp.SemanticTokensRefreshRequest.method, () => {console.log("semantic token refresh request")});
+connection.onRequest(lsp.SemanticTokensRegistrationType.method, () => {console.log("semantic token registration request")});
+connection.onRequest(lsp.SemanticTokensRangeRequest.method, () => {console.log("semantic token range request")});
+connection.onRequest(lsp.SemanticTokensRequest.method, (params: lsp.SemanticTokensParams) => {
+	console.log("semantic token request for " + params.textDocument.uri);
+	let souffleDoc =  uriToSouffleDocument.get(params.textDocument.uri);
+	if (souffleDoc) {
+		return Promise.resolve(souffleDoc.getSemanticTokens()); 
+	}
+	return Promise.resolve(undefined);
+	//connection.sendProgress(lsp.SemanticTokensRequest.type)
+});
 
 // Listen on the connection
 connection.listen();

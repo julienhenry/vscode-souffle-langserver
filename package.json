@@ -3,7 +3,7 @@
 	"description": "A language server for Soufflé",
 	"author": "Julien Henry",
 	"license": "MIT",
-	"version": "1.0.2",
+	"version": "1.0.6",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/julienhenry/vscode-souffle-langserver.git"
@@ -11,10 +11,9 @@
 	"icon": "images/logo.png",
 	"publisher": "jhenry",
 	"categories": [],
-	"keywords": [
-	],
+	"keywords": [],
 	"engines": {
-		"vscode": "^1.43.0"
+		"vscode": "^1.55.0"
 	},
 	"activationEvents": [
 		"onLanguage:souffle"
@@ -30,7 +29,18 @@
 				],
 				"aliases": [
 					"Soufflé"
-				]
+				],
+				"configuration": "./language-configuration.json"
+			},
+			{
+				"id": "souffle-ram",
+				"extensions": [
+					".ram"
+				],
+				"aliases": [
+					"Soufflé-ram"
+				],
+				"configuration": "./language-configuration.json"
 			}
 		],
 		"configuration": {
@@ -42,9 +52,39 @@
 					"type": "string",
 					"default": "master.project",
 					"description": "name of the master file passed to the Soufflé compiler"
+				},
+				"souffleLanguageServer.transformedRam": {
+					"scope": "resource",
+					"type": "string",
+					"default": "",
+					"description": "name of the transformed-ram file"
+				},
+				"souffleLanguageServer.transformedDatalog": {
+					"scope": "resource",
+					"type": "string",
+					"default": "",
+					"description": "name of the transformed datalog file"
+				},
+				"souffleLanguageServer.souffleInvocationDir": {
+					"scope": "resource",
+					"type": "string",
+					"default": "",
+					"description": "path from where the souffle compilation is executed"
 				}
 			}
-		}
+		},
+		"grammars": [
+			{
+				"language": "souffle",
+				"scopeName": "source.souffle",
+				"path": "./syntaxes/souffle.tmLanguage.json"
+			},
+			{
+				"language": "souffle-ram",
+				"scopeName": "source.souffle-ram",
+				"path": "./syntaxes/souffle-ram.tmLanguage.json"
+			}
+		]
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run webpack && cp ./server/node_modules/web-tree-sitter/tree-sitter.wasm ./server/out/",
@@ -65,11 +105,11 @@
 		"@types/node": "^12.12.0",
 		"@typescript-eslint/parser": "^2.3.0",
 		"eslint": "^6.4.0",
+		"merge-options": "^2.0.0",
 		"mocha": "^6.2.2",
 		"ts-loader": "^7.0.1",
 		"typescript": "^3.8.3",
 		"webpack": "^4.43.0",
-		"webpack-cli": "^3.3.11",
-		"merge-options": "^2.0.0"
+		"webpack-cli": "^3.3.11"
 	}
 }

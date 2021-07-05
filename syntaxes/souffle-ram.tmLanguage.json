@@ -1,0 +1,304 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Soufflé-ram",
+	"author": "Julien Henry",
+	"scopeName": "source.souffle-ram",
+	"fileTypes": [
+		"ram"
+	],
+	"patterns": [
+		{
+			"include": "#strings"
+		},
+		{
+			"include": "#linecomment"
+		},
+		{
+			"include": "#blockcomment"
+		},
+		{
+			"include": "#forindex"
+		},
+		{
+			"include": "#for"
+		},
+		{
+			"include": "#unpack"
+		},
+		{
+			"include": "#timer"
+		},
+		{
+			"include": "#in"
+		},
+		{
+			"include": "#into"
+		},
+		{
+			"include": "#isempty"
+		},
+		{
+			"include": "#clear_io"
+		},
+		{
+			"include": "#log_size"
+		},
+		{
+			"include": "#swap"
+		},
+		{
+			"include": "#erase"
+		},
+		{
+			"include": "#keywords"
+		}
+	],
+	"repository": {
+		"strings": {
+			"name": "string.quoted.double.souffle-ram",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.souffle-ram",
+					"match": "\\\\."
+				}
+			]
+		},
+		"linecomment": {
+			"patterns": [
+				{
+					"name": "comment.line.double-slash.souffle-ram",
+					"match": "//.*$\n?"
+				}
+			]
+		},
+		"blockcomment": {
+			"patterns": [
+				{
+					"name": "comment.block.souffle-ram",
+					"begin": "/\\*",
+					"end": "\\*/"
+				}
+			]
+		},
+		"forindex": {
+			"patterns": [
+				{
+					"match": "(FOR) ([^\\s]+) (IN) ([^\\s]+) (ON INDEX)",
+					"captures": {
+						"1": {
+							"name": "keyword.control.souffle-ram"
+						},
+						"2": {
+							"name": "entity.name.souffle-ram"
+						},
+						"3": {
+							"name": "keyword.control.souffle-ram"
+						},
+						"4": {
+							"name": "entity.name.function.souffle-ram"
+						},
+						"5": {
+							"name": "keyword.souffle-ram"
+						}
+					}
+				}
+			]
+		},
+		"for": {
+			"patterns": [
+				{
+					"match": "(FOR) ([^\\s]+) (IN) ([^\\s]+)",
+					"captures": {
+						"1": {
+							"name": "keyword.control.souffle-ram"
+						},
+						"2": {
+							"name": "entity.name.souffle-ram"
+						},
+						"3": {
+							"name": "keyword.control.souffle-ram"
+						},
+						"4": {
+							"name": "entity.name.function.souffle-ram"
+						}
+					}
+				}
+			]
+		},
+		"unpack": {
+			"patterns": [
+				{
+					"match": "(UNPACK) ([^\\s]+) (ARITY) \\d+ (FROM) ([^\\s]+)",
+					"captures": {
+						"1": {
+							"name": "keyword.control.souffle-ram"
+						},
+						"2": {
+							"name": "entity.name.souffle-ram"
+						},
+						"3": {
+							"name": "keyword.souffle-ram"
+						},
+						"4": {
+							"name": "keyword.control.souffle-ram"
+						},
+						"5": {
+							"name": "entity.name.function.souffle-ram"
+						}
+					}
+				}
+			]
+		},
+		"timer": {
+			"patterns": [
+				{
+					"match": "(TIMER ON) ([^\\s]+) ",
+					"captures": {
+						"1": {
+							"name": "keyword.souffle-ram"
+						},
+						"2": {
+							"name": "entity.name.function.souffle-ram"
+						}
+					}
+				}
+			]
+		},
+		"in": {
+			"patterns": [
+				{
+					"match": " (IN) ([^\\s]+)",
+					"captures": {
+						"1": {
+							"name": "keyword.souffle-ram"
+						},
+						"2": {
+							"name": "entity.name.function.souffle-ram"
+						}
+					}
+				}
+			]
+		},
+		"into": {
+			"patterns": [
+				{
+					"match": " (INTO) ([^\\s]+)",
+					"captures": {
+						"1": {
+							"name": "keyword.souffle-ram"
+						},
+						"2": {
+							"name": "entity.name.function.souffle-ram"
+						}
+					}
+				}
+			]
+		},
+		"isempty": {
+			"patterns": [
+				{
+					"match": "(ISEMPTY)\\(([^\\s]+)\\)",
+					"captures": {
+						"1": {
+							"name": "keyword.souffle-ram"
+						},
+						"2": {
+							"name": "entity.name.function.souffle-ram"
+						}
+					}
+				}
+			]
+		},
+		"clear_io": {
+			"patterns": [
+				{
+					"match": "(CLEAR|IO) ([^\\s]+)",
+					"captures": {
+						"1": {
+							"name": "keyword.souffle-ram"
+						},
+						"2": {
+							"name": "entity.name.function.souffle-ram"
+						}
+					}
+				}
+			]
+		},
+		"log_size": {
+			"patterns": [
+				{
+					"match": " (LOG SIZE) ([^\\s]+) (TEXT)",
+					"captures": {
+						"1": {
+							"name": "keyword.souffle-ram"
+						},
+						"2": {
+							"name": "entity.name.function.souffle-ram"
+						},
+						"3": {
+							"name": "keyword.souffle-ram"
+						}
+					}
+				}
+			]
+		},
+		"swap": {
+			"patterns": [
+				{
+					"match": " (SWAP) \\(([^,]+),([^,]+)\\)",
+					"captures": {
+						"1": {
+							"name": "keyword.souffle-ram"
+						},
+						"2": {
+							"name": "entity.name.function.souffle-ram"
+						},
+						"3": {
+							"name": "entity.name.function.souffle-ram"
+						}
+					}
+				}
+			]
+		},
+		"erase": {
+			"patterns": [
+				{
+					"match": " (ERASE) \\([^)]+\\) (FROM) ([^\\s]+)",
+					"captures": {
+						"1": {
+							"name": "keyword.souffle-ram"
+						},
+						"2": {
+							"name": "keyword.souffle-ram"
+						},
+						"3": {
+							"name": "entity.name.function.souffle-ram"
+						}
+					}
+				}
+			]
+		},
+		"keywords": {
+			"patterns": [
+				{
+					"name": "keyword.control.souffle-ram",
+					"match": "(PARALLEL|END PARALLEL|LOOP|END LOOP|QUERY|END QUERY|IF|INSERT|EXIT)"
+				},
+				{
+					"name": "keyword.souffle-ram",
+					"match": "(ON INDEX|WHERE|EXISTS|END TIMER|DEBUG|END DEBUG|CALL|NOT|PACK|IN)"
+				},
+				{
+					"name": "constant.language.souffle-ram",
+					"match": "(NUMBER|strlen|NOT|AND|OR|UNDEF)"
+				},
+				{
+					"name": "markup.heading",
+					"match": "(PROGRAM|END PROGRAM|MAIN|END MAIN|SUBROUTINE|END SUBROUTINE|DECLARATION|END DECLARATION)"
+				}
+			]
+		}
+	}
+}

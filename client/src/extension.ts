@@ -10,8 +10,11 @@ import {
 	LanguageClient,
 	LanguageClientOptions,
 	ServerOptions,
-	TransportKind
-} from 'vscode-languageclient';
+	TransportKind,
+	Position,
+	Location,
+	Range
+} from 'vscode-languageclient/node';
 
 let client: LanguageClient;
 
@@ -23,6 +26,8 @@ export function activate(context: vscode.ExtensionContext) {
 	// The debug options for the server
 	// --inspect=6009: runs the server in Node's Inspector mode so VS Code can attach to the server for debugging
 	let debugOptions = { execArgv: ['--nolazy', '--inspect=6009'] };
+
+	console.log("Activating souffle-langserver " + serverModule);
 
 	// If the extension is launched in debug mode then the debug server options are used
 	// Otherwise the run options are used
@@ -56,14 +61,43 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Start the client. This will also launch the server
 	client.start();
-
-	context.subscriptions.push(vscode.commands.registerCommand("souffleLanguageServer.selectRoot", () => {
-		vscode.window.showOpenDialog({canSelectFolders: false, canSelectMany: false}).then(uris => {
+	console.log(`Activating souffle-langserver done`);
+	context.subscriptions.push(vscode.commands.registerCommand("souffleLanguageServer.selectRoot", (defaultUri: string) => {
+		vscode.window.showOpenDialog(
+			{canSelectFolders: false, canSelectMany: false, defaultUri: vscode.Uri.parse(defaultUri)}
+			).then(uris => {
 			uris.forEach(uri => {
 				vscode.window.showInformationMessage("setting new root to " + uri.fsPath);
 				vscode.workspace.getConfiguration().update("souffleLanguageServer.rootProjectFile", uri.fsPath);
 			});
 		});
+	}));
+
+	function convertPosition(pos:Position): vscode.Position {
+		return new vscode.Position(pos.line, pos.character);
+	}
+
+	function convertRange(range:Range): vscode.Range {
+		return new vscode.Range(convertPosition(range.start), convertPosition(range.end));
+	}
+
+	function convertLocation(loc:Location): vscode.Location {
+		return new vscode.Location(vscode.Uri.parse(loc.uri), convertRange(loc.range));
+	}
+
+	context.subscriptions.push(vscode.commands.registerCommand("peek", (uri_str: string, pos:Position, locs:Location[], kind:string) => {
+		let p = convertPosition(pos);
+		let uri = vscode.Uri.parse(uri_str);
+		let l = [];
+		locs.forEach(loc => {
+			l.push(convertLocation(loc));
+		});
+		vscode.commands.executeCommand("editor.action.peekLocations",
+			uri,
+			p,
+			l,
+			kind
+		).then(ok => {}, ko => {vscode.window.showErrorMessage("error " + ko)});
 	}));
 
 }

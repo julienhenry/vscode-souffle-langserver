@@ -1,40 +1,238 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as tree_sitter from 'web-tree-sitter';
-import { Connection, Diagnostic, DiagnosticSeverity, Position, PublishDiagnosticsParams, Range, Location, LocationLink, TextDocumentPositionParams, Hover, MarkupKind, MarkupContent, DocumentHighlight, DocumentHighlightKind, CompletionItem, CompletionItemKind, DidOpenTextDocumentParams, DidChangeTextDocumentParams, TextDocumentContentChangeEvent } from 'vscode-languageserver';
+import { CodeLens, Command, Connection, Diagnostic, DiagnosticSeverity, Position, PublishDiagnosticsParams, Range, Location, LocationLink, TextDocumentPositionParams, Hover, MarkupKind, MarkupContent, DocumentHighlight, DocumentHighlightKind, CompletionItem, CompletionItemKind, DidOpenTextDocumentParams, DidChangeTextDocumentParams, TextDocumentContentChangeEvent, SemanticTokensBuilder, SemanticTokens, SemanticTokenTypes, SemanticTokenModifiers } from 'vscode-languageserver/node';
 import { URI as Uri } from 'vscode-uri';
 import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
+import { rootUri, souffleInvocationDir, transformedDatalog, transformedRam } from './server';
 
 export let parsers: tree_sitter[] = [];
 
 export let uriToSouffleDocument = new Map<string, SouffleDocument>();
 
-export class SouffleContext {
-	// current components in which the parsing is currently located
-	components: { name: string, node: tree_sitter.SyntaxNode }[] = [];
+enum tokenTypes {
+    namespace,
+    type,
+    class,
+    enum,
+    interface,
+    struct,
+    typeParameter,
+    parameter,
+    variable,
+    property,
+    enumMember,
+    event,
+    function,
+    method,
+    macro,
+    keyword,
+    modifier,
+    comment,
+    string,
+    number,
+    regexp,
+    operator
+};
 
-	constructor() {
+enum tokenModifiers {
+    declaration,
+    definition,
+    readonly,
+    static,
+    deprecated,
+    abstract,
+    async,
+    modification,
+    documentation,
+    defaultLibrary
+};
+
+export const legend = {
+	tokenTypes: [
+    "namespace",
+    "type",
+    "class",
+    "enum",
+    "interface",
+    "struct",
+    "typeParameter",
+    "parameter",
+    "variable",
+    "property",
+    "enumMember",
+    "event",
+    "function",
+    "method",
+    "macro",
+    "keyword",
+    "modifier",
+    "comment",
+    "string",
+    "number",
+    "regexp",
+    "operator"
+],
+	tokenModifiers: [
+    'declaration',
+    'definition',
+    'readonly',
+    'static',
+    'deprecated',
+    'abstract',
+    'async',
+    'modification',
+    'documentation',
+    'defaultLibrary'
+]
+}
+
+export class SouffleComponent {
+	doc: SouffleDocument;
+	is_init: boolean;
+	name: string;
+	node: tree_sitter.SyntaxNode;
+	children = new Map<string, SouffleComponent>();
+	parent: SouffleComponent | undefined;
+
+	// declarations of relations (i.e. .decl)
+	relation_decls = new Map<string, tree_sitter.SyntaxNode>();
+	// def and uses of relations in rules:
+	relation_defs = new Map<string, tree_sitter.SyntaxNode[]>();
+	relation_uses = new Map<string, tree_sitter.SyntaxNode[]>();
+
+	init_comp = new Map<string, SouffleComponent>();
+
+	type_defs = new Map<string, tree_sitter.SyntaxNode>();
+
+	constructor(doc: SouffleDocument, n: string, init: boolean, node: tree_sitter.SyntaxNode) {
+		this.doc = doc;
+		this.name = n;
+		this.is_init = init;
+		this.node = node;
+		this.parent = undefined;
 	}
 
-	enter_component(ident_node: tree_sitter.SyntaxNode, comp_type_node: tree_sitter.SyntaxNode) {
-		this.components.push({ name: ident_node.text, node: comp_type_node });
+	clear() {
+		this.relation_decls.clear();
+		this.relation_defs.clear();
+		this.relation_uses.clear();
+		this.init_comp.clear();
+		this.type_defs.clear();
+		this.children.forEach((comp,_) => comp.clear());
+		this.children.clear();
 	}
 
-	exit_component() {
-		this.components.pop();
+	addChild(comp: SouffleComponent) {
+		this.children.set(comp.name, comp)
+		comp.parent = this
 	}
 
-	prefix(): string {
-		let prefix = "";
-		this.components.forEach(component => {
-			if (prefix.length > 0) {
-				prefix += ".";
+	instantiate(init_name: string, inst_comp: SouffleComponent) {
+		this.init_comp.set(init_name, inst_comp);
+	}
+
+	find_decls(identifier: string[]):tree_sitter.SyntaxNode | undefined {
+		let head = identifier[0];
+		if (identifier.length <= 1) {
+			let decls = this.relation_decls.get(head);
+			if (decls)
+				return decls
+			else return undefined;
+		} else {
+			let comp = this.init_comp.get(head);
+			if (comp) {
+				return comp.find_decls(identifier.slice(1));
+			} else if (this.parent) {
+				return this.parent.find_decls(identifier);
 			}
-			prefix += component.name
+		}
+	}
+
+	// used for completion, get all declarations starting with some prefix
+	get_usable_decls(prefix: string, look_into_alldocuments: boolean): Map<string, tree_sitter.SyntaxNode> {
+		let res = new Map<string, tree_sitter.SyntaxNode>();
+		this.relation_decls.forEach((value, key) => {
+			if (key.startsWith(prefix)) {
+				res.set(key, value);
+			}
 		});
-		return prefix;
+		let splitted = prefix.split(".");
+		if (splitted.length > 1) {
+			let comp = this.init_comp.get(splitted[0]);
+			if (comp) {
+				let decls = comp.get_usable_decls(splitted.slice(1).join('.'), false);
+				decls.forEach((value, key) => {
+					res.set(splitted[0] + '.' + key, value);
+				});
+			}
+		}
+		if (look_into_alldocuments) {
+			uriToSouffleDocument.forEach((doc, uri) => {
+				let decls = doc.globalCtx.get_usable_decls(prefix, false);
+				decls.forEach((value, key) => {
+					res.set(key, value);
+				});
+			});
+		}
+		return res;
+	}
+
+
+	find_defs(identifier: string[]): tree_sitter.SyntaxNode[] {
+		let head = identifier[0];
+		let defs: tree_sitter.SyntaxNode[] = [];
+		if (identifier.length <= 1) {
+			let d = this.relation_defs.get(head)
+			if (d) {
+				defs = defs.concat(d);
+			}
+		} else {
+			// TODO ugly
+			let id = identifier.join('.')
+			let d = this.relation_defs.get(id)
+			if (d) {
+				defs = defs.concat(d);
+			}
+			//
+			let comp = this.init_comp.get(head);
+			if (comp) {
+				defs = defs.concat(comp.find_defs(identifier.slice(1)));
+			}
+			if (this.parent) {
+				return this.parent.find_defs(identifier);
+			}
+		}
+		return defs;
+	}
+
+	find_uses(identifier: string[]): tree_sitter.SyntaxNode[] {
+		let head = identifier[0];
+		let defs: tree_sitter.SyntaxNode[] = [];
+		if (identifier.length <= 1) {
+			let d = this.relation_uses.get(head)
+			if (d) {
+				defs = defs.concat(d);
+			}
+		} else {
+			// TODO ugly
+			let id = identifier.join('.')
+			let d = this.relation_uses.get(id)
+			if (d) {
+				defs = defs.concat(d);
+			}
+			//
+			let comp = this.init_comp.get(head);
+			if (comp) {
+				defs = defs.concat(comp.find_uses(identifier.slice(1)));
+			}
+			if (this.parent) {
+				return this.parent.find_uses(identifier);
+			}
+		}
+		return defs;
 	}
 }
 
@@ -52,14 +250,11 @@ export class SouffleDocument {
 	// #define preprocessor directives that are currently not parsed correctly
 	preprocessor_define: string = "";
 
-	// declarations of relations (i.e. .decl)
-	relation_decls = new Map<string, tree_sitter.SyntaxNode>();
+	globalCtx: SouffleComponent;
 
-	// def and uses of relations in rules:
-	relation_defs = new Map<string, tree_sitter.SyntaxNode[]>();
-	relation_uses = new Map<string, tree_sitter.SyntaxNode[]>();
+	components_decls = new Map<tree_sitter.SyntaxNode, SouffleComponent>();
 
-	type_defs = new Map<string, tree_sitter.SyntaxNode>();
+	semanticTokens: SemanticTokensBuilder = new SemanticTokensBuilder();
 
 	constructor(connection: Connection, uri: string, languageId: string, version: number, content: string) {
 		this.connection = connection;
@@ -69,6 +264,7 @@ export class SouffleDocument {
 		this.version = version;
 		this.tree_version = version;
 		uriToSouffleDocument.set(uri, this);
+		this.globalCtx = new SouffleComponent(this, "", true, this.tree.rootNode);
 	}
 
 	log(str: string) {
@@ -80,7 +276,61 @@ export class SouffleDocument {
 		return tree.rootNode.descendantForPosition(point);
 	}
 
-	visit(node: tree_sitter.SyntaxNode, ctx: SouffleContext) {
+	setSemanticToken(node: tree_sitter.SyntaxNode, t:tokenTypes, modifiers:tokenModifiers) {
+		// TODO push must be called in the order it appears in the file,
+		// which is not the case right now
+		this.semanticTokens.push(
+			node.startPosition.row,
+			node.startPosition.column,
+			node.endPosition.column - node.startPosition.column,
+			t,
+			modifiers);
+	}
+
+	tokens: {row: number, col:number, length:number, token_types: number, token_modifiers: number}[] = [];
+
+	computeSemanticTokens(node:tree_sitter.SyntaxNode) {
+		return; // TODO
+		this.semanticTokens = new SemanticTokensBuilder();
+		this.tokens = [];
+		console.log("compute semantic tokens");
+		let rules = node.descendantsOfType('rule_def')
+		for (const rule of rules) {
+			let args = rule.descendantsOfType('arg')
+			for (const arg of args) {
+				this.setSemanticToken(arg, tokenTypes.variable, tokenModifiers.readonly);
+			};
+
+			let head = node.children[0];
+			let body = node.children[2];
+			let head_atoms = head.descendantsOfType("atom");
+			let body_atoms = body.descendantsOfType("atom");
+			for (const atom of head_atoms) {
+				let identifier = atom.children[0];
+				this.setSemanticToken(identifier, tokenTypes.function, tokenModifiers.definition);
+			};
+			for (const atom of body_atoms) {
+				let identifier = atom.children[0];
+				this.setSemanticToken(identifier, tokenTypes.function, tokenModifiers.readonly);
+			};
+		};
+
+		node.descendantsOfType('fact').forEach(fact => {
+			let atom = fact.children[0];
+			let identifier = atom.children[0];
+			this.setSemanticToken(identifier, tokenTypes.function, tokenModifiers.definition);
+		});
+
+		node.descendantsOfType('type').forEach(ty => {
+			let ident = ty.children[1];
+			this.setSemanticToken(ty.children[0], tokenTypes.keyword, tokenModifiers.definition);
+			this.setSemanticToken(ident, tokenTypes.type, tokenModifiers.definition);
+
+		});
+	}
+
+
+	visit(node: tree_sitter.SyntaxNode, ctx: SouffleComponent) {
 		if (node.type === 'ERROR' && node.children.find(function (node) { return node.hasError(); }) === undefined) {
 			this.syntax_errors.push({node: node, message: "Syntax Error", severity: DiagnosticSeverity.Error});
 		}
@@ -111,59 +361,63 @@ export class SouffleDocument {
 		if (node.type === 'relation_decl') {
 			let relation_list = node.children[1];
 			let decls = relation_list.descendantsOfType("IDENT")
-			decls.forEach(decl => {
-				let name = ctx.prefix() + decl.text;
-				this.relation_decls.set(name, decl);
-			})
+			for (const decl of decls) {
+				let name = decl.text;
+				ctx.relation_decls.set(name, decl);
+			};
 
 			let colons = node.descendantsOfType("COLON");
-			colons.forEach(colon => {
+			for (const colon of colons) {
 				let arg_ident = colon.previousSibling;
 				let type_identifier = colon.nextSibling;
-			});
+			};
 		}
 
 		if (node.type === 'rule_def') {
+			// TODO: USE identifier
 			let head = node.children[0];
 			let body = node.children[2];
 			let head_atoms = head.descendantsOfType("atom");
 			let body_atoms = body.descendantsOfType("atom");
-			head_atoms.forEach(atom => {
+			for (const atom of head_atoms) {
 				let identifier = atom.children[0];
-				let cur = this.relation_defs.get(identifier.text);
+				let cur = ctx.relation_defs.get(identifier.text);
 				if (!cur) cur = [];
 				cur.push(identifier);
-				this.relation_defs.set(identifier.text, cur);
-			});
-			body_atoms.forEach(atom => {
+				ctx.relation_defs.set(identifier.text, cur);
+			};
+			for (const atom of body_atoms) {
 				let identifier = atom.children[0];
-				let cur = this.relation_uses.get(identifier.text);
+				let cur = ctx.relation_uses.get(identifier.text);
 				if (!cur) cur = [];
 				cur.push(identifier);
-				this.relation_uses.set(identifier.text, cur);
-			});
+				ctx.relation_uses.set(identifier.text, cur);
+			};
 		}
 
 		if (node.type === 'fact') {
 			// a fact is a definition
+			// TODO: USE identifier
 			let atom = node.children[0];
 			let identifier = atom.children[0];
-			let cur = this.relation_defs.get(identifier.text);
+			let cur = ctx.relation_defs.get(identifier.text);
 			if (!cur) cur = [];
 			cur.push(identifier);
-			this.relation_defs.set(identifier.text, cur);
+			ctx.relation_defs.set(identifier.text, cur);
 		}
 
 		if (node.type === 'INPUT_DECL') {
 			// a .input directive is also defining facts
 			let io_head = node.parent!;
 			let identifiers = io_head.descendantsOfType("identifier");
-			identifiers.forEach(identifier => {
-				let cur = this.relation_defs.get(identifier.text);
+			// TODO: USE identifier
+			for (const identifier of identifiers) {
+				if (identifier.parent!.type === "identifier") return;
+				let cur = ctx.relation_defs.get(identifier.text);
 				if (!cur) cur = [];
 				cur.push(identifier);
-				this.relation_defs.set(identifier.text, cur);
-			});
+				ctx.relation_defs.set(identifier.text, cur);
+			};
 		}
 
 		if (node.type === 'define') {
@@ -172,23 +426,35 @@ export class SouffleDocument {
 
 		if (node.type === 'type') {
 			let ident = node.children[1];
-			this.type_defs.set(ident.text, node);
+			ctx.type_defs.set(ident.text, node);
+		}
+
+		if (node.type === 'comp_init') {
+			let ident = node.children[1];
+			let comp_types = node.descendantsOfType("comp_type");
+			for (const comp_type of comp_types) {
+				let comp_ident = comp_type.children[0];
+				let instantiated = ctx.children.get(comp_ident.text);
+				if (instantiated)
+					ctx.instantiate(ident.text, instantiated);
+			};
 		}
 
 		if (node.type === 'component') {
 			// todo update ctx for children
 			let component_head = node.children[0];
 			let comp_types = node.descendantsOfType("comp_type");
-			comp_types.forEach(comp_type => {
+			for (const comp_type of comp_types) {
 				let comp_ident = comp_type.children[0];
-				ctx.enter_component(comp_ident, comp_type);
+				let child_ctx = new SouffleComponent(this, comp_ident.text, false, node);
 				if (node.childCount > 0) {
 					for (let child of node.children) {
-						this.visit(child, ctx);
+						this.visit(child, child_ctx);
 					}
 				}
-				ctx.exit_component();
-			});
+				ctx.addChild(child_ctx);
+				this.components_decls.set(node, child_ctx);
+			};
 
 		} else {
 			if (node.childCount > 0) {
@@ -245,11 +511,8 @@ export class SouffleDocument {
 		this.syntax_errors = [];
 		this.semantic_errors = [];
 		this.includes = [];
-		this.relation_decls.clear();
-		this.relation_defs.clear();
-		this.relation_uses.clear();
-		let ctx = new SouffleContext();
-		this.visit(this.tree.rootNode, ctx);
+		this.globalCtx.clear();
+		this.visit(this.tree.rootNode, this.globalCtx);
 	}
 
 	validate(recursive: boolean = false) {
@@ -286,12 +549,12 @@ export class SouffleDocument {
 
 	getSemanticErrors() {
 		this.semantic_errors = [];
-		let all = [this.relation_uses, this.relation_defs];
+		let all = [this.globalCtx.relation_uses, this.globalCtx.relation_defs];
 		all.forEach(map => {
 			map.forEach((uses,symbol) => {
 				let declared = false;
 				uriToSouffleDocument.forEach(souffleDoc => {
-					let decl = souffleDoc.relation_decls.get(symbol);
+					let decl = souffleDoc.globalCtx.find_decls(symbol.split('.'));
 					if (decl) {declared = true;}
 					if (!declared && souffleDoc.preprocessor_define.includes(symbol)) {
 						// silent error if symbol appears in unparsed #define
@@ -300,17 +563,17 @@ export class SouffleDocument {
 				});
 				if (!declared) {
 					uses.forEach(node => {
-						this.semantic_errors.push({node: node, message: "Use of undeclared relation: " + symbol, severity: DiagnosticSeverity.Error});
+						//this.semantic_errors.push({node: node, message: "Use of undeclared relation: " + symbol, severity: DiagnosticSeverity.Error});
 					});
 				}
 			});
 		});
 
 		// detect uses of relations that are never defined
-		this.relation_uses.forEach((uses,symbol) => {
+		this.globalCtx.relation_uses.forEach((uses,symbol) => {
 			let defined = false;
 			uriToSouffleDocument.forEach(souffleDoc => {
-				let decl = souffleDoc.relation_defs.get(symbol);
+				let decl = souffleDoc.globalCtx.find_decls(symbol.split('.'));
 				if (decl) {defined = true;}
 				if (!defined && souffleDoc.preprocessor_define.includes(symbol)) {
 					// silent error if symbol appears in unparsed #define
@@ -319,7 +582,7 @@ export class SouffleDocument {
 			});
 			if (!defined) {
 				uses.forEach(node => {
-					this.semantic_errors.push({node: node, message: "Use of a relation that is always empty: " + symbol, severity: DiagnosticSeverity.Warning});
+					//this.semantic_errors.push({node: node, message: "Use of a relation that is always empty: " + symbol, severity: DiagnosticSeverity.Warning});
 				});
 			}
 		});
@@ -347,13 +610,45 @@ export class SouffleDocument {
 		});
 	}
 
+	getFullIdentifier(node: tree_sitter.SyntaxNode): tree_sitter.SyntaxNode {
+		while (node.type == "IDENT" && node.parent && node.parent.type == "identifier") {
+			node = node.parent;
+		}
+		return node;
+	}
+
+	getParentComponent(node: tree_sitter.SyntaxNode): SouffleComponent {
+		while (node.parent && !this.components_decls.has(node)) {
+			node = node.parent;
+		}
+		let comp = this.components_decls.get(node);
+		if (comp)
+			return comp;
+		else
+			return this.globalCtx;
+	}
+
+	getSemanticTokens(): SemanticTokens {
+		this.computeSemanticTokens(this.tree.rootNode);
+		let tokens = this.semanticTokens.build();
+		return tokens;
+	}
+
 	getDeclarations(position: Position): LocationLink[] {
 		let leaf = this.getLeafAtPosition(position, this.tree);
-		let symbol = leaf.text;
+		leaf = this.getFullIdentifier(leaf);
 		let decls: LocationLink[] = [];
-		this.log("getDeclarations for " + symbol);
+		let component = this.getParentComponent(leaf);
+		let identifier = leaf.text.split('.');
+
+		let decl = component.find_decls(identifier);
+		if (decl) {
+			decls = decls.concat(toLocationLinks(this.document.uri,[decl]));
+		}
+
 		uriToSouffleDocument.forEach(souffleDoc => {
-			let decl = souffleDoc.relation_decls.get(symbol);
+			if (souffleDoc.document.uri.toString() === this.document.uri.toString()) return;
+			let decl = souffleDoc.globalCtx.find_decls(identifier);
 			if (decl) {
 				decls = decls.concat(toLocationLinks(souffleDoc.document.uri,[decl]));
 			}
@@ -366,11 +661,11 @@ export class SouffleDocument {
 		let symbol = leaf.text;
 		let refs: Location[] = [];
 		uriToSouffleDocument.forEach(souffleDoc => {
-			let uses = souffleDoc.relation_uses.get(symbol);
+			let uses = souffleDoc.globalCtx.relation_uses.get(symbol);
 			if (uses) {
 				refs = refs.concat(toLocations(souffleDoc.document.uri,uses));
 			}
-			let defs = souffleDoc.relation_defs.get(symbol);
+			let defs = souffleDoc.globalCtx.relation_defs.get(symbol);
 			if (defs) {
 				refs = refs.concat(toLocations(souffleDoc.document.uri,defs));
 			}
@@ -380,10 +675,19 @@ export class SouffleDocument {
 
 	getDefinitions(position: Position): LocationLink[] | undefined {
 		let leaf = this.getLeafAtPosition(position, this.tree);
-		let symbol = leaf.text;
+		leaf = this.getFullIdentifier(leaf);
+		let component = this.getParentComponent(leaf);
+		let identifier = leaf.text.split('.');
 		let defs: LocationLink[] = [];
+
+		let def = component.find_defs(identifier);
+		if (def) {
+			defs = defs.concat(toLocationLinks(this.document.uri,def));
+		}
+
 		uriToSouffleDocument.forEach(souffleDoc => {
-			let def = souffleDoc.relation_defs.get(symbol);
+			if (souffleDoc.document.uri.toString() === this.document.uri.toString()) return;
+			let def = souffleDoc.globalCtx.find_defs(identifier);
 			if (def) {
 				defs = defs.concat(toLocationLinks(souffleDoc.document.uri,def));
 			}
@@ -393,21 +697,40 @@ export class SouffleDocument {
 
 	getDocumentHighlights(position: Position): DocumentHighlight[] | undefined {
 		let leaf = this.getLeafAtPosition(position, this.tree);
+		leaf = this.getFullIdentifier(leaf);
 		let symbol = leaf.text;
 		let highlights: DocumentHighlight[] = [];
 
-		let uses = this.relation_uses.get(symbol);
+		let uses = this.globalCtx.find_uses(symbol.split('.'));
 		if (uses) {
 			uses.forEach(use => {
 				highlights.push(DocumentHighlight.create(range(use), DocumentHighlightKind.Read));
 			});
 		}
-		let defs = this.relation_defs.get(symbol);
+		let defs = this.globalCtx.find_defs(symbol.split('.'));
 		if (defs) {
 			defs.forEach(def => {
 				highlights.push(DocumentHighlight.create(range(def), DocumentHighlightKind.Write));
 			});
 		}
+
+		// if we want to highlight an arg used in a rule
+		let arg = leaf
+		while (arg.type !== 'arg' && arg.parent) {
+			arg = arg.parent;
+		}
+		if (arg.type === 'arg') {
+			let symbol = arg.text;
+			let rule_def = arg;
+			while (rule_def.type !== 'rule_def' && rule_def.parent) {rule_def = rule_def.parent;}
+			let args = rule_def.descendantsOfType('arg');
+			args.forEach(arg => {
+				if (arg.text === symbol) {
+					highlights.push(DocumentHighlight.create(range(arg), DocumentHighlightKind.Write));
+				}
+			})
+		}
+
 		return highlights;
 	}
 
@@ -437,57 +760,59 @@ export class SouffleDocument {
 		//let symbol = this.document.getText(this.getWordRangeAtPosition(position));
 
 		let leaf = this.getLeafAtPosition(position, this.tree);
+
+		leaf = this.getFullIdentifier(leaf);
+		let component = this.getParentComponent(leaf);
+
 		let symbol = leaf.text;
 		symbol = symbol.split(/\s/)[0];
 
 		this.log("got Completion request: " + symbol);
 		let items: CompletionItem[] = [];
-		uriToSouffleDocument.forEach(souffleDoc => {
-			souffleDoc.relation_decls.forEach((node,name) => {
-				if (name.includes("next_instruction")) {
-					this.log("name: " + name);
+		component.get_usable_decls(symbol, true).forEach((node,name) => {
+			if (name.startsWith(symbol)) {
+				while (node && node.type !== 'relation_decl') {
+					if (node.parent) node  = node.parent;
+					else break;
 				}
-				if (name.startsWith(symbol)) {
-					while (node && node.type !== 'relation_decl') {
-						if (node.parent) node  = node.parent;
-						else break;
-					}
-					let markup = [];
-					markup.push("```souffle");
-					markup.push(node.text);
-					markup.push("```");
-					let markdown : MarkupContent = {
-						kind: MarkupKind.Markdown,
-						value: markup.join('\n')
-					};
-					items.push({
-						label: name,
-						kind: CompletionItemKind.Function,
-						documentation: markdown,
-						//detail: node.text,
-						data: 1,
-					});
-				}
-			});
+				let markup = [];
+				markup.push("```souffle");
+				markup.push(node.text);
+				markup.push("```");
+				let markdown : MarkupContent = {
+					kind: MarkupKind.Markdown,
+					value: markup.join('\n')
+				};
+				items.push({
+					label: name,
+					kind: CompletionItemKind.Function,
+					documentation: markdown,
+					//detail: node.text,
+					data: 1,
+				});
+			}
 		});
 		return Promise.resolve(items);
 	}
 
 	getHover(position: Position): Hover | undefined {
 		let leaf = this.getLeafAtPosition(position, this.tree);
+		leaf = this.getFullIdentifier(leaf);
+		let component = this.getParentComponent(leaf);
+
 		let symbol = leaf.text;
 		let markup = [];
 		markup.push("```souffle");
-		uriToSouffleDocument.forEach(souffleDoc => {
-			let decl = souffleDoc.relation_decls.get(symbol);
-			if (decl) {
-				while (decl && decl.type !== 'relation_decl') {
-					if (decl.parent) decl  = decl.parent;
-					else break;
-				}
-				markup.push(decl.text);
+
+		component.get_usable_decls(leaf.text, true).forEach((decl, sym) => {
+			while (decl && decl.type !== 'relation_decl') {
+				if (decl.parent) decl  = decl.parent;
+				else break;
 			}
-			let type_def = souffleDoc.type_defs.get(symbol);
+			markup.push(decl.text);
+		});
+		uriToSouffleDocument.forEach(souffleDoc => {
+			let type_def = souffleDoc.globalCtx.type_defs.get(symbol);
 			if (type_def) {
 				markup.push(type_def.text);
 			}
@@ -504,6 +829,93 @@ export class SouffleDocument {
 		};
 	}
 
+	parseTransformedDatalog(dl_path:Uri, transformed_path:Uri) {
+		let res : Map<number, Location[]> = new Map();
+		if (!fs.existsSync(transformed_path.fsPath) || !fs.statSync(transformed_path.fsPath).isFile()) {
+			return res;
+		}
+		let content = fs.readFileSync(transformed_path.fsPath).toString();
+		let tree = parsers[0].parse(content);
+		let comments = tree.rootNode.descendantsOfType("LOC");
+		let regexp = /.loc (?<filename>[^ ]+) \[(?<startline>\d+):(?<startcol>\d+)-(?<endline>\d+):(?<endcol>\d+)\]/g;
+		comments.forEach(comment => {
+			let m = regexp.exec(comment.text);
+			if (!m) return;
+			let groups = m.groups;
+			if (!groups) return;
+			let resolved = path.resolve(souffleInvocationDir.fsPath, groups.filename);
+			if (resolved != dl_path.fsPath) return;
+			let rule = comment.parent;
+			if (!rule) return;
+			let desc = rule.descendantsOfType("rule_def");
+			if (desc.length <= 0) return;
+			rule = desc[0];
+			if (rule) {
+				let rule_range = range(rule);
+				let orig_range : Range = {"start": {"line": +groups.startline-1, "character": +groups.startcol-1}, "end": {"line": +groups.endline-1, "character": +groups.endcol-1}}
+				let cur = res.get(orig_range.start.line);
+				if (!cur) cur = [];
+				cur.push(Location.create(transformed_path.toString(), rule_range));
+				res.set(orig_range.start.line, cur);
+			}
+		});
+		return res;
+	}
+
+	parseTransformedRam(dl_path:Uri, transformed_path:Uri) {
+		let res : Map<number, Location[]> = new Map();
+		if (!fs.existsSync(transformed_path.fsPath) || !fs.statSync(transformed_path.fsPath).isFile()) {
+			return res;
+		}
+		let lines = fs.readFileSync(transformed_path.fsPath).toString().split('\n');
+		let regexp = /in file (?<filename>[^ ]+) \[(?<startline>\d+):(?<startcol>\d+)-(?<endline>\d+):(?<endcol>\d+)\]/g;
+		lines.forEach((line, index) => {
+			let m = regexp.exec(line);
+			if (!m) return;
+			let groups = m.groups;
+			if (!groups) return;
+			let resolved = path.resolve(souffleInvocationDir.fsPath, groups.filename);
+			if (resolved != dl_path.fsPath) return;
+			let cur = res.get(+groups.startline-1);
+			if (!cur) cur = [];
+			cur.push(Location.create(transformed_path.toString(), Range.create(Position.create(index,0), Position.create(index, line.length-1))));
+			res.set(+groups.startline-1, cur);
+		});
+		return res;
+	}
+
+	getLenses(): CodeLens[] {
+		let res = this.parseTransformedDatalog(Uri.parse(this.document.uri), transformedDatalog);
+		let ram_res = this.parseTransformedRam(Uri.parse(this.document.uri), transformedRam);
+		let rules = this.tree.rootNode.descendantsOfType("rule_def");
+		let lenses: CodeLens[] = [];
+		rules.forEach(rule => {
+			let r = range(rule);
+			let transformed_dl_ranges = res.get(r.start.line);
+			if (transformed_dl_ranges) {
+				let lens = CodeLens.create(r);
+				lens.command = Command.create("Datalog", "peek",
+					this.document.uri,
+					r.start,
+					transformed_dl_ranges,
+					'peek'
+				);
+				lenses.push(lens);
+			}
+			let transformed_ram_ranges = ram_res.get(r.start.line);
+			if (transformed_ram_ranges) {
+				let lens = CodeLens.create(r);
+				lens.command = Command.create("RAM", "peek",
+					this.document.uri,
+					r.start,
+					transformed_ram_ranges,
+					'peek'
+				);
+				lenses.push(lens);
+			}
+		});
+		return lenses;
+	}
 }
 
 function range(root: tree_sitter.SyntaxNode): Range {
