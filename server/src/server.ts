@@ -32,7 +32,7 @@ let hasDiagnosticRelatedInformationCapability: boolean = false;
 
 connection.onInitialize(async (params: lsp.InitializeParams) => {
 	let capabilities = params.capabilities;
-	params.initializationOptions
+	params.initializationOptions;
 	// Does the client support the `workspace/configuration` request?
 	// If not, we will fall back using global settings
 	hasConfigurationCapability = !!(
@@ -80,9 +80,14 @@ connection.onInitialize(async (params: lsp.InitializeParams) => {
 			}
 		};
 	}
-
-    let wasm = path.join(__dirname, "..", "tree-sitter-souffle", "tree-sitter-souffle.wasm");
-    let parser = await tree_sitter.Language.load(wasm).then(language => {
+	let wasm = path.join(__dirname, '..', 'tree-sitter-souffle', 'tree-sitter-souffle.wasm');
+	await tree_sitter.init();
+	try {
+		await tree_sitter.Language.load(wasm);
+	} catch(e) {
+		connection.window.showErrorMessage('error: ' + e);
+	}
+	let parser = await tree_sitter.Language.load(wasm).then(language => {
     	let parser = new tree_sitter();
     	parser.setLanguage(language);
     	return parser;
@@ -120,7 +125,7 @@ export let souffleInvocationDir: Uri;
 connection.onDidChangeConfiguration(change => {
 	let settings: SouffleServerSettings = change.settings.souffleLanguageServer;
 	let root_uri = Uri.file(settings.rootProjectFile);
-	console.log("## Soufflé root file is " + root_uri);
+	console.log('## Soufflé root file is ' + root_uri);
 	rootUri = root_uri;
 	transformedRam = Uri.file(settings.transformedRam);
 	transformedDatalog = Uri.file(settings.transformedDatalog);
@@ -131,7 +136,7 @@ connection.onDidChangeConfiguration(change => {
 			if (err) {
 				return;
 			}
-			let root = new SouffleDocument(connection, root_uri.toString(), "souffle", -1, content.toString());
+			let root = new SouffleDocument(connection, root_uri.toString(), 'souffle', -1, content.toString());
 			root.parse();
 			sleep(1000).then(() => 
 				root.validate(true)
@@ -188,7 +193,7 @@ connection.onDidChangeTextDocument((params) => {
 	//let uri = change.document.uri.toString();
 	let d = uriToSouffleDocument.get(uri);
 	if (d) {
-		d.updateDocument(params)
+		d.updateDocument(params);
 		d.parse();
 		d.validate();
 	}
@@ -268,13 +273,13 @@ connection.onCodeAction(
 		params.context.diagnostics.forEach(diag => {
 			let codeAction: lsp.CodeAction = {
 				command: {
-					title: "Set master project file",
-					command: "souffleLanguageServer.selectRoot",
+					title: 'Set master project file',
+					command: 'souffleLanguageServer.selectRoot',
 					arguments: [params.textDocument.uri]
 				},
-				title: "Update master project file",
+				title: 'Update master project file',
 				kind: lsp.CodeActionKind.QuickFix,
-			}
+			};
 			actions.push(codeAction);
 		});
 		return Promise.resolve(actions);
@@ -293,12 +298,12 @@ connection.onCodeLens(
 	}
 );
 
-connection.onRequest(lsp.SemanticTokensDeltaRequest.method, () => {console.log("semantic token delta request")});
-connection.onRequest(lsp.SemanticTokensRefreshRequest.method, () => {console.log("semantic token refresh request")});
-connection.onRequest(lsp.SemanticTokensRegistrationType.method, () => {console.log("semantic token registration request")});
-connection.onRequest(lsp.SemanticTokensRangeRequest.method, () => {console.log("semantic token range request")});
+connection.onRequest(lsp.SemanticTokensDeltaRequest.method, () => {console.log('semantic token delta request');});
+connection.onRequest(lsp.SemanticTokensRefreshRequest.method, () => {console.log('semantic token refresh request');});
+connection.onRequest(lsp.SemanticTokensRegistrationType.method, () => {console.log('semantic token registration request');});
+connection.onRequest(lsp.SemanticTokensRangeRequest.method, () => {console.log('semantic token range request');});
 connection.onRequest(lsp.SemanticTokensRequest.method, (params: lsp.SemanticTokensParams) => {
-	console.log("semantic token request for " + params.textDocument.uri);
+	console.log('semantic token request for ' + params.textDocument.uri);
 	let souffleDoc =  uriToSouffleDocument.get(params.textDocument.uri);
 	if (souffleDoc) {
 		return Promise.resolve(souffleDoc.getSemanticTokens()); 

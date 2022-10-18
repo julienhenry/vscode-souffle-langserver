@@ -35,7 +35,7 @@ enum tokenTypes {
     number,
     regexp,
     operator
-};
+}
 
 enum tokenModifiers {
     declaration,
@@ -48,46 +48,46 @@ enum tokenModifiers {
     modification,
     documentation,
     defaultLibrary
-};
+}
 
 export const legend = {
 	tokenTypes: [
-    "namespace",
-    "type",
-    "class",
-    "enum",
-    "interface",
-    "struct",
-    "typeParameter",
-    "parameter",
-    "variable",
-    "property",
-    "enumMember",
-    "event",
-    "function",
-    "method",
-    "macro",
-    "keyword",
-    "modifier",
-    "comment",
-    "string",
-    "number",
-    "regexp",
-    "operator"
-],
+		'namespace',
+		'type',
+		'class',
+		'enum',
+		'interface',
+		'struct',
+		'typeParameter',
+		'parameter',
+		'variable',
+		'property',
+		'enumMember',
+		'event',
+		'function',
+		'method',
+		'macro',
+		'keyword',
+		'modifier',
+		'comment',
+		'string',
+		'number',
+		'regexp',
+		'operator'
+	],
 	tokenModifiers: [
-    'declaration',
-    'definition',
-    'readonly',
-    'static',
-    'deprecated',
-    'abstract',
-    'async',
-    'modification',
-    'documentation',
-    'defaultLibrary'
-]
-}
+		'declaration',
+		'definition',
+		'readonly',
+		'static',
+		'deprecated',
+		'abstract',
+		'async',
+		'modification',
+		'documentation',
+		'defaultLibrary'
+	]
+};
 
 export class SouffleComponent {
 	doc: SouffleDocument;
@@ -126,8 +126,8 @@ export class SouffleComponent {
 	}
 
 	addChild(comp: SouffleComponent) {
-		this.children.set(comp.name, comp)
-		comp.parent = this
+		this.children.set(comp.name, comp);
+		comp.parent = this;
 	}
 
 	instantiate(init_name: string, inst_comp: SouffleComponent) {
@@ -138,9 +138,11 @@ export class SouffleComponent {
 		let head = identifier[0];
 		if (identifier.length <= 1) {
 			let decls = this.relation_decls.get(head);
-			if (decls)
-				return decls
-			else return undefined;
+			if (decls) {
+				return decls;
+			} else {
+				return undefined;
+			}
 		} else {
 			let comp = this.init_comp.get(head);
 			if (comp) {
@@ -159,7 +161,7 @@ export class SouffleComponent {
 				res.set(key, value);
 			}
 		});
-		let splitted = prefix.split(".");
+		let splitted = prefix.split('.');
 		if (splitted.length > 1) {
 			let comp = this.init_comp.get(splitted[0]);
 			if (comp) {
@@ -185,14 +187,14 @@ export class SouffleComponent {
 		let head = identifier[0];
 		let defs: tree_sitter.SyntaxNode[] = [];
 		if (identifier.length <= 1) {
-			let d = this.relation_defs.get(head)
+			let d = this.relation_defs.get(head);
 			if (d) {
 				defs = defs.concat(d);
 			}
 		} else {
 			// TODO ugly
-			let id = identifier.join('.')
-			let d = this.relation_defs.get(id)
+			let id = identifier.join('.');
+			let d = this.relation_defs.get(id);
 			if (d) {
 				defs = defs.concat(d);
 			}
@@ -212,14 +214,14 @@ export class SouffleComponent {
 		let head = identifier[0];
 		let defs: tree_sitter.SyntaxNode[] = [];
 		if (identifier.length <= 1) {
-			let d = this.relation_uses.get(head)
+			let d = this.relation_uses.get(head);
 			if (d) {
 				defs = defs.concat(d);
 			}
 		} else {
 			// TODO ugly
-			let id = identifier.join('.')
-			let d = this.relation_uses.get(id)
+			let id = identifier.join('.');
+			let d = this.relation_uses.get(id);
 			if (d) {
 				defs = defs.concat(d);
 			}
@@ -248,7 +250,7 @@ export class SouffleDocument {
 	syntax_errors: {node: tree_sitter.SyntaxNode, message: string, severity: DiagnosticSeverity}[] = [];
 	semantic_errors: {node: tree_sitter.SyntaxNode, message: string, severity: DiagnosticSeverity}[] = [];
 	// #define preprocessor directives that are currently not parsed correctly
-	preprocessor_define: string = "";
+	preprocessor_define: string = '';
 
 	globalCtx: SouffleComponent;
 
@@ -264,11 +266,11 @@ export class SouffleDocument {
 		this.version = version;
 		this.tree_version = version;
 		uriToSouffleDocument.set(uri, this);
-		this.globalCtx = new SouffleComponent(this, "", true, this.tree.rootNode);
+		this.globalCtx = new SouffleComponent(this, '', true, this.tree.rootNode);
 	}
 
 	log(str: string) {
-		if (false) console.log(str);
+		if (false) {console.log(str);}
 	}
 
 	getLeafAtPosition(pos: Position, tree: tree_sitter.Tree) {
@@ -293,27 +295,27 @@ export class SouffleDocument {
 		return; // TODO
 		this.semanticTokens = new SemanticTokensBuilder();
 		this.tokens = [];
-		console.log("compute semantic tokens");
-		let rules = node.descendantsOfType('rule_def')
+		console.log('compute semantic tokens');
+		let rules = node.descendantsOfType('rule_def');
 		for (const rule of rules) {
-			let args = rule.descendantsOfType('arg')
+			let args = rule.descendantsOfType('arg');
 			for (const arg of args) {
 				this.setSemanticToken(arg, tokenTypes.variable, tokenModifiers.readonly);
-			};
+			}
 
 			let head = node.children[0];
 			let body = node.children[2];
-			let head_atoms = head.descendantsOfType("atom");
-			let body_atoms = body.descendantsOfType("atom");
+			let head_atoms = head.descendantsOfType('atom');
+			let body_atoms = body.descendantsOfType('atom');
 			for (const atom of head_atoms) {
 				let identifier = atom.children[0];
 				this.setSemanticToken(identifier, tokenTypes.function, tokenModifiers.definition);
-			};
+			}
 			for (const atom of body_atoms) {
 				let identifier = atom.children[0];
 				this.setSemanticToken(identifier, tokenTypes.function, tokenModifiers.readonly);
-			};
-		};
+			}
+		}
 
 		node.descendantsOfType('fact').forEach(fact => {
 			let atom = fact.children[0];
@@ -332,7 +334,7 @@ export class SouffleDocument {
 
 	visit(node: tree_sitter.SyntaxNode, ctx: SouffleComponent) {
 		if (node.type === 'ERROR' && node.children.find(function (node) { return node.hasError(); }) === undefined) {
-			this.syntax_errors.push({node: node, message: "Syntax Error", severity: DiagnosticSeverity.Error});
+			this.syntax_errors.push({node: node, message: 'Syntax Error', severity: DiagnosticSeverity.Error});
 		}
 
 		if (node.type === 'filename') {
@@ -347,12 +349,12 @@ export class SouffleDocument {
 			}
 			this.includes.push(include_uri);
 			if (!fs.existsSync(include_uri.fsPath)) {
-				this.syntax_errors.push({node: node, message: "Include file does not exist", severity: DiagnosticSeverity.Error});
+				this.syntax_errors.push({node: node, message: 'Include file does not exist', severity: DiagnosticSeverity.Error});
 			} else if (!uriToSouffleDocument.has(include_uri.toString())) {
-				this.log("reading include file: " + include_uri.fsPath);
+				this.log('reading include file: ' + include_uri.fsPath);
 				fs.readFile(include_uri.fsPath,(err, content) => {
 					if (err) {return;}
-					let d = new SouffleDocument(this.connection, include_uri.toString(),"souffle",-1,content.toString());
+					let d = new SouffleDocument(this.connection, include_uri.toString(),'souffle',-1,content.toString());
 					d.parse();
 				});
 			}
@@ -360,39 +362,39 @@ export class SouffleDocument {
 
 		if (node.type === 'relation_decl') {
 			let relation_list = node.children[1];
-			let decls = relation_list.descendantsOfType("IDENT")
+			let decls = relation_list.descendantsOfType('IDENT');
 			for (const decl of decls) {
 				let name = decl.text;
 				ctx.relation_decls.set(name, decl);
-			};
+			}
 
-			let colons = node.descendantsOfType("COLON");
+			let colons = node.descendantsOfType('COLON');
 			for (const colon of colons) {
 				let arg_ident = colon.previousSibling;
 				let type_identifier = colon.nextSibling;
-			};
+			}
 		}
 
 		if (node.type === 'rule_def') {
 			// TODO: USE identifier
 			let head = node.children[0];
 			let body = node.children[2];
-			let head_atoms = head.descendantsOfType("atom");
-			let body_atoms = body.descendantsOfType("atom");
+			let head_atoms = head.descendantsOfType('atom');
+			let body_atoms = body.descendantsOfType('atom');
 			for (const atom of head_atoms) {
 				let identifier = atom.children[0];
 				let cur = ctx.relation_defs.get(identifier.text);
-				if (!cur) cur = [];
+				if (!cur) {cur = [];}
 				cur.push(identifier);
 				ctx.relation_defs.set(identifier.text, cur);
-			};
+			}
 			for (const atom of body_atoms) {
 				let identifier = atom.children[0];
 				let cur = ctx.relation_uses.get(identifier.text);
-				if (!cur) cur = [];
+				if (!cur) {cur = [];}
 				cur.push(identifier);
 				ctx.relation_uses.set(identifier.text, cur);
-			};
+			}
 		}
 
 		if (node.type === 'fact') {
@@ -401,7 +403,7 @@ export class SouffleDocument {
 			let atom = node.children[0];
 			let identifier = atom.children[0];
 			let cur = ctx.relation_defs.get(identifier.text);
-			if (!cur) cur = [];
+			if (!cur) {cur = [];}
 			cur.push(identifier);
 			ctx.relation_defs.set(identifier.text, cur);
 		}
@@ -409,19 +411,19 @@ export class SouffleDocument {
 		if (node.type === 'INPUT_DECL') {
 			// a .input directive is also defining facts
 			let io_head = node.parent!;
-			let identifiers = io_head.descendantsOfType("identifier");
+			let identifiers = io_head.descendantsOfType('identifier');
 			// TODO: USE identifier
 			for (const identifier of identifiers) {
-				if (identifier.parent!.type === "identifier") return;
+				if (identifier.parent!.type === 'identifier') {return;}
 				let cur = ctx.relation_defs.get(identifier.text);
-				if (!cur) cur = [];
+				if (!cur) {cur = [];}
 				cur.push(identifier);
 				ctx.relation_defs.set(identifier.text, cur);
-			};
+			}
 		}
 
 		if (node.type === 'define') {
-			this.preprocessor_define += " " + node.text;
+			this.preprocessor_define += ' ' + node.text;
 		}
 
 		if (node.type === 'type') {
@@ -431,19 +433,19 @@ export class SouffleDocument {
 
 		if (node.type === 'comp_init') {
 			let ident = node.children[1];
-			let comp_types = node.descendantsOfType("comp_type");
+			let comp_types = node.descendantsOfType('comp_type');
 			for (const comp_type of comp_types) {
 				let comp_ident = comp_type.children[0];
 				let instantiated = ctx.children.get(comp_ident.text);
 				if (instantiated)
-					ctx.instantiate(ident.text, instantiated);
-			};
+				{ctx.instantiate(ident.text, instantiated);}
+			}
 		}
 
 		if (node.type === 'component') {
 			// todo update ctx for children
 			let component_head = node.children[0];
-			let comp_types = node.descendantsOfType("comp_type");
+			let comp_types = node.descendantsOfType('comp_type');
 			for (const comp_type of comp_types) {
 				let comp_ident = comp_type.children[0];
 				let child_ctx = new SouffleComponent(this, comp_ident.text, false, node);
@@ -454,7 +456,7 @@ export class SouffleDocument {
 				}
 				ctx.addChild(child_ctx);
 				this.components_decls.set(node, child_ctx);
-			};
+			}
 
 		} else {
 			if (node.childCount > 0) {
@@ -495,13 +497,13 @@ export class SouffleDocument {
 					let delta = { startIndex, oldEndIndex, newEndIndex, startPosition, oldEndPosition, newEndPosition };
 					old_tree.edit(delta);
 				} else {
-					this.connection.console.log("range NOT in change");
+					this.connection.console.log('range NOT in change');
 					// TODO
 				}
 			}
 			TextDocument.update(textDocument,contentChanges,version);
 			let new_tree = parsers[0].parse(textDocument.getText(), old_tree);
-			this.log("updated tree");
+			this.log('updated tree');
 			this.tree = new_tree;
 			this.tree_version = version;
 		}
@@ -516,16 +518,16 @@ export class SouffleDocument {
 	}
 
 	validate(recursive: boolean = false) {
-		this.log("validating " + this.document.uri.toString());
+		this.log('validating ' + this.document.uri.toString());
 		this.getSemanticErrors();
 		let diags: Diagnostic[] = [];
-		let errors = this.syntax_errors.concat(this.semantic_errors)
+		let errors = this.syntax_errors.concat(this.semantic_errors);
 		errors.forEach(error => {
 			let d: Diagnostic = {
 				range: range(error.node),
 				message: error.message,
 				severity: error.severity,
-				source: "Souffle language server"
+				source: 'Souffle language server'
 			};
 			diags.push(d);
 		});
@@ -540,7 +542,7 @@ export class SouffleDocument {
 			this.includes.forEach(include => {
 				let included = uriToSouffleDocument.get(include.toString());
 				if (included) {
-					console.log("validating " + include.toString());
+					console.log('validating ' + include.toString());
 					included.validate(recursive);
 				}
 			});
@@ -588,30 +590,30 @@ export class SouffleDocument {
 		});
 
 		// detect rules that use arguments only once
-		let rules = this.tree.rootNode.descendantsOfType('rule_def')
+		let rules = this.tree.rootNode.descendantsOfType('rule_def');
 		rules.forEach(rule => {
-			let args = rule.descendantsOfType('arg')
+			let args = rule.descendantsOfType('arg');
 			let used_idents = new Map<string, tree_sitter.SyntaxNode[]>();
 			args.forEach(arg => {
 				if (arg.childCount === 1 && arg.children[0].type === 'IDENT') {
 					let ident = arg.children[0].text;
 					let n = used_idents.get(ident);
 					if (!n) {n = [];}
-					n.push(arg.children[0])
+					n.push(arg.children[0]);
 					used_idents.set(ident, n);
 				}
 			});
 			used_idents.forEach((nodes, symbol) => {
 				if (this.preprocessor_define.includes(symbol)) {return;}
-				if (nodes.length <= 1 && !(symbol.startsWith("__") && symbol.endsWith("__"))) {
-					this.semantic_errors.push({node: nodes[0], message: "Symbol " + symbol + " is used only once", severity: DiagnosticSeverity.Warning})
+				if (nodes.length <= 1 && !(symbol.startsWith('__') && symbol.endsWith('__'))) {
+					this.semantic_errors.push({node: nodes[0], message: 'Symbol ' + symbol + ' is used only once', severity: DiagnosticSeverity.Warning});
 				}
-			})
+			});
 		});
 	}
 
 	getFullIdentifier(node: tree_sitter.SyntaxNode): tree_sitter.SyntaxNode {
-		while (node.type == "IDENT" && node.parent && node.parent.type == "identifier") {
+		while (node.type === 'IDENT' && node.parent && node.parent.type === 'identifier') {
 			node = node.parent;
 		}
 		return node;
@@ -623,9 +625,9 @@ export class SouffleDocument {
 		}
 		let comp = this.components_decls.get(node);
 		if (comp)
-			return comp;
+		{return comp;}
 		else
-			return this.globalCtx;
+		{return this.globalCtx;}
 	}
 
 	getSemanticTokens(): SemanticTokens {
@@ -647,7 +649,7 @@ export class SouffleDocument {
 		}
 
 		uriToSouffleDocument.forEach(souffleDoc => {
-			if (souffleDoc.document.uri.toString() === this.document.uri.toString()) return;
+			if (souffleDoc.document.uri.toString() === this.document.uri.toString()) {return;}
 			let decl = souffleDoc.globalCtx.find_decls(identifier);
 			if (decl) {
 				decls = decls.concat(toLocationLinks(souffleDoc.document.uri,[decl]));
@@ -686,7 +688,7 @@ export class SouffleDocument {
 		}
 
 		uriToSouffleDocument.forEach(souffleDoc => {
-			if (souffleDoc.document.uri.toString() === this.document.uri.toString()) return;
+			if (souffleDoc.document.uri.toString() === this.document.uri.toString()) {return;}
 			let def = souffleDoc.globalCtx.find_defs(identifier);
 			if (def) {
 				defs = defs.concat(toLocationLinks(souffleDoc.document.uri,def));
@@ -715,7 +717,7 @@ export class SouffleDocument {
 		}
 
 		// if we want to highlight an arg used in a rule
-		let arg = leaf
+		let arg = leaf;
 		while (arg.type !== 'arg' && arg.parent) {
 			arg = arg.parent;
 		}
@@ -728,7 +730,7 @@ export class SouffleDocument {
 				if (arg.text === symbol) {
 					highlights.push(DocumentHighlight.create(range(arg), DocumentHighlightKind.Write));
 				}
-			})
+			});
 		}
 
 		return highlights;
@@ -742,19 +744,19 @@ export class SouffleDocument {
 		const character = Math.min(lineText.length - 1, Math.max(0, position.character));
 		let startChar = character;
 		while (startChar > 0 && !/\s/.test(lineText.charAt(startChar - 1)))
-			--startChar;
+		{--startChar;}
 		let endChar = character;
 		while (endChar < lineText.length - 1 && !/\s/.test(lineText.charAt(endChar)))
-			++endChar;
+		{++endChar;}
 		if (startChar === endChar)
-			return undefined;
+		{return undefined;}
 		else
-			return Range.create(position.line, startChar, position.line, endChar);
+		{return Range.create(position.line, startChar, position.line, endChar);}
 	}
 
 	getCompletion(position: Position): Promise<CompletionItem[]> {
-		while (this.version != this.tree_version) {
-			this.log("mismatch version: " + this.version + " ... " + this.tree_version);
+		while (this.version !== this.tree_version) {
+			this.log('mismatch version: ' + this.version + ' ... ' + this.tree_version);
 			break;
 		}
 		//let symbol = this.document.getText(this.getWordRangeAtPosition(position));
@@ -767,18 +769,18 @@ export class SouffleDocument {
 		let symbol = leaf.text;
 		symbol = symbol.split(/\s/)[0];
 
-		this.log("got Completion request: " + symbol);
+		this.log('got Completion request: ' + symbol);
 		let items: CompletionItem[] = [];
 		component.get_usable_decls(symbol, true).forEach((node,name) => {
 			if (name.startsWith(symbol)) {
 				while (node && node.type !== 'relation_decl') {
-					if (node.parent) node  = node.parent;
-					else break;
+					if (node.parent) {node  = node.parent;}
+					else {break;}
 				}
 				let markup = [];
-				markup.push("```souffle");
+				markup.push('```souffle');
 				markup.push(node.text);
-				markup.push("```");
+				markup.push('```');
 				let markdown : MarkupContent = {
 					kind: MarkupKind.Markdown,
 					value: markup.join('\n')
@@ -802,12 +804,12 @@ export class SouffleDocument {
 
 		let symbol = leaf.text;
 		let markup = [];
-		markup.push("```souffle");
+		markup.push('```souffle');
 
 		component.get_usable_decls(leaf.text, true).forEach((decl, sym) => {
 			while (decl && decl.type !== 'relation_decl') {
-				if (decl.parent) decl  = decl.parent;
-				else break;
+				if (decl.parent) {decl  = decl.parent;}
+				else {break;}
 			}
 			markup.push(decl.text);
 		});
@@ -817,12 +819,12 @@ export class SouffleDocument {
 				markup.push(type_def.text);
 			}
 		});
-		markup.push("```");
+		markup.push('```');
 		let markdown : MarkupContent = {
 			kind: MarkupKind.Markdown,
 			value: markup.join('\n')
 		};
-		if (markup.length <= 2) return undefined;
+		if (markup.length <= 2) {return undefined;}
 		return { 
 			contents: markdown,
 			range: {start: {line: leaf.startPosition.row, character: leaf.startPosition.column}, end: {line: leaf.endPosition.row, character: leaf.endPosition.column}}
@@ -836,25 +838,25 @@ export class SouffleDocument {
 		}
 		let content = fs.readFileSync(transformed_path.fsPath).toString();
 		let tree = parsers[0].parse(content);
-		let comments = tree.rootNode.descendantsOfType("LOC");
+		let comments = tree.rootNode.descendantsOfType('LOC');
 		let regexp = /.loc (?<filename>[^ ]+) \[(?<startline>\d+):(?<startcol>\d+)-(?<endline>\d+):(?<endcol>\d+)\]/g;
 		comments.forEach(comment => {
 			let m = regexp.exec(comment.text);
-			if (!m) return;
+			if (!m) {return;}
 			let groups = m.groups;
-			if (!groups) return;
+			if (!groups) {return;}
 			let resolved = path.resolve(souffleInvocationDir.fsPath, groups.filename);
-			if (resolved != dl_path.fsPath) return;
+			if (resolved !== dl_path.fsPath) {return;}
 			let rule = comment.parent;
-			if (!rule) return;
-			let desc = rule.descendantsOfType("rule_def");
-			if (desc.length <= 0) return;
+			if (!rule) {return;}
+			let desc = rule.descendantsOfType('rule_def');
+			if (desc.length <= 0) {return;}
 			rule = desc[0];
 			if (rule) {
 				let rule_range = range(rule);
-				let orig_range : Range = {"start": {"line": +groups.startline-1, "character": +groups.startcol-1}, "end": {"line": +groups.endline-1, "character": +groups.endcol-1}}
+				let orig_range : Range = {'start': {'line': +groups.startline-1, 'character': +groups.startcol-1}, 'end': {'line': +groups.endline-1, 'character': +groups.endcol-1}};
 				let cur = res.get(orig_range.start.line);
-				if (!cur) cur = [];
+				if (!cur) {cur = [];}
 				cur.push(Location.create(transformed_path.toString(), rule_range));
 				res.set(orig_range.start.line, cur);
 			}
@@ -871,13 +873,13 @@ export class SouffleDocument {
 		let regexp = /in file (?<filename>[^ ]+) \[(?<startline>\d+):(?<startcol>\d+)-(?<endline>\d+):(?<endcol>\d+)\]/g;
 		lines.forEach((line, index) => {
 			let m = regexp.exec(line);
-			if (!m) return;
+			if (!m) {return;}
 			let groups = m.groups;
-			if (!groups) return;
+			if (!groups) {return;}
 			let resolved = path.resolve(souffleInvocationDir.fsPath, groups.filename);
-			if (resolved != dl_path.fsPath) return;
+			if (resolved !== dl_path.fsPath) {return;}
 			let cur = res.get(+groups.startline-1);
-			if (!cur) cur = [];
+			if (!cur) {cur = [];}
 			cur.push(Location.create(transformed_path.toString(), Range.create(Position.create(index,0), Position.create(index, line.length-1))));
 			res.set(+groups.startline-1, cur);
 		});
@@ -887,14 +889,14 @@ export class SouffleDocument {
 	getLenses(): CodeLens[] {
 		let res = this.parseTransformedDatalog(Uri.parse(this.document.uri), transformedDatalog);
 		let ram_res = this.parseTransformedRam(Uri.parse(this.document.uri), transformedRam);
-		let rules = this.tree.rootNode.descendantsOfType("rule_def");
+		let rules = this.tree.rootNode.descendantsOfType('rule_def');
 		let lenses: CodeLens[] = [];
 		rules.forEach(rule => {
 			let r = range(rule);
 			let transformed_dl_ranges = res.get(r.start.line);
 			if (transformed_dl_ranges) {
 				let lens = CodeLens.create(r);
-				lens.command = Command.create("Datalog", "peek",
+				lens.command = Command.create('Datalog', 'peek',
 					this.document.uri,
 					r.start,
 					transformed_dl_ranges,
@@ -905,7 +907,7 @@ export class SouffleDocument {
 			let transformed_ram_ranges = ram_res.get(r.start.line);
 			if (transformed_ram_ranges) {
 				let lens = CodeLens.create(r);
-				lens.command = Command.create("RAM", "peek",
+				lens.command = Command.create('RAM', 'peek',
 					this.document.uri,
 					r.start,
 					transformed_ram_ranges,
@@ -920,8 +922,8 @@ export class SouffleDocument {
 
 function range(root: tree_sitter.SyntaxNode): Range {
 	return {
-		"start": { "line": root.startPosition.row, "character": root.startPosition.column },
-		"end": { "line": root.endPosition.row, "character": root.endPosition.column }
+		'start': { 'line': root.startPosition.row, 'character': root.startPosition.column },
+		'end': { 'line': root.endPosition.row, 'character': root.endPosition.column }
 	};
 }
 
